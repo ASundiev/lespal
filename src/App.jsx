@@ -167,93 +167,38 @@ function jsonpOnce(url) {
 async function apiRequest({ baseUrl, token }, action, payload) {
   if (!baseUrl) throw new Error('Please set the Apps Script Web App URL in Settings.');
 
-  // Detect backends
-  const isAppsScriptHost = /script\.googleusercontent\.com|script\.google\.com/i.test(baseUrl);
-  const isYandexApiGw = /\.apigw\.yandexcloud\.net/i.test(baseUrl);
+  // Map actions to REST-ish paths and HTTP verbs
+  const ACTIONS = {
+    listSongs:   { path: 'songs',   method: 'GET'  },
+    listLessons: { path: 'lessons', method: 'GET'  },
+    createSong:  { path: 'songs',   method: 'POST' },
+    createLesson:{ path: 'lessons', method: 'POST' },
+  };
+  const cfg = ACTIONS[action] || { path: '', method: 'GET' };
 
-  // Reads = GET, writes = POST (for Apps Script JSONP path we still pack payload into query)
-  const isRead = /^list/i.test(action);
-  const method = isRead ? 'GET' : 'POST';
+  // Build URL: base (without trailing slash) + path, with required query params
+  const root = baseUrl.replace(/\/$/, '');
+  const url = new URL(`${root}/${cfg.path}`);
+  if (action) url.searchParams.set('action', action);
+  if (token)  url.searchParams.set('token', token);
 
-  // --- Fast path for our Yandex API Gateway proxy ---------------------------------
-  // The YC function expects a POST to /proxy with JSON body { action, payload, token }.
-  if (isYandexApiGw) {
-    const url = baseUrl.replace(/\/$/, '') + '/proxy';
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      mode: 'cors',
-      body: JSON.stringify({ action, payload: payload || {}, token }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data && data.error) throw new Error(data.error);
-    return data;
+  // Perform request
+  const init = { method: cfg.method, headers: {} };
+  if (cfg.method === 'POST') {
+    init.headers['Content-Type'] = 'application/json';
+    // Apps Script proxy expects the JSON body to wrap the payload
+    init.body = JSON.stringify({ payload: payload || {} });
   }
 
-  // --- Generic CORS-friendly fetch for non-Apps-Script hosts ----------------------
-  async function tryFetchOnce() {
-    const url = new URL(baseUrl);
-    // For fetch backends that understand query params (kept for compatibility):
-    if (token) url.searchParams.set('token', token);
-    url.searchParams.set('action', action);
-
-    const init = { mode: 'cors', method };
-    if (method === 'POST') {
-      init.headers = { 'Content-Type': 'application/json' };
-      init.body = JSON.stringify({ payload });
-    }
-
-    const res = await fetch(url.toString(), init);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data && data.error) throw new Error(data.error);
-    return data;
+  const res = await fetch(url.toString(), init);
+  if (!res.ok) {
+    let extra = '';
+    try { extra = ` — ${await res.text()}`; } catch {}
+    throw new Error(`HTTP ${res.status}${extra.slice(0, 200)}`);
   }
-
-  // If it is not an Apps Script host, prefer direct fetch first; fall back to JSONP if CORS blocks us.
-  if (!isAppsScriptHost) {
-    try {
-      return await tryFetchOnce();
-    } catch (e) {
-      if (!(e instanceof TypeError)) throw e; // Network/HTTP error — rethrow
-      // Else TypeError likely due to CORS — fall through to JSONP path below.
-    }
-  }
-
-  // --- Apps Script JSONP path (bypasses CORS) ------------------------------------
-  const qp = new URLSearchParams();
-  if (token) qp.set('token', token);
-  qp.set('action', action);
-
-  // Prefer googleusercontent; fall back to script.google.com
-  const prefer = baseUrl.replace('script.google.com', 'script.googleusercontent.com');
-  const fallback = baseUrl;
-
-  const url1 =
-    `${prefer}${prefer.includes('?') ? '&' : '?'}${qp.toString()}` +
-    (isRead ? '' : `&payload=${encodeURIComponent(JSON.stringify(payload || {}))}`);
-  const url2 =
-    `${fallback}${fallback.includes('?') ? '&' : '?'}${qp.toString()}` +
-    (isRead ? '' : `&payload=${encodeURIComponent(JSON.stringify(payload || {}))}`);
-
-  try {
-    const data = await jsonpOnce(url1);
-    if (data && data.error) throw new Error(data.error);
-    return data;
-  } catch (e1) {
-    try {
-      const data = await jsonpOnce(url2);
-      if (data && data.error) throw new Error(data.error);
-      return data;
-    } catch (e2) {
-      const hint =
-        (String(e1?.message || '').includes('network') || String(e2?.message || '').includes('network'))
-          ? ' A browser extension might be blocking script.googleusercontent.com on this domain. Try disabling it for this site.'
-          : '';
-      throw new Error(`JSONP failed (${e1.message}); fallback failed (${e2.message}).${hint}`);
-    }
-  }
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
 }
 
 // ---------------------------

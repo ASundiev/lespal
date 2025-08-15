@@ -79,7 +79,12 @@ function Header({ tab, setTab, openSettings, onRefresh }) {
     <div className="sticky top-0 z-30 bg-neutral-950/80 backdrop-blur border-b border-neutral-800">
       <div className="mx-auto max-w-5xl px-3">
         <div className="flex items-center justify-between py-3">
-          <div className="text-xl font-semibold tracking-tight">Lespal</div>
+          <img
+            src={`${import.meta.env.BASE_URL}logo-dark.svg`}
+            alt="Lespal"
+            className="h-10 w-auto select-none"
+            draggable={false}
+          />
           <div className="flex items-center gap-2">
             <TabBtn active={tab==='lessons'} onClick={()=>setTab('lessons')}>Lessons</TabBtn>
             <TabBtn active={tab==='songs'} onClick={()=>setTab('songs')}>Songs</TabBtn>
@@ -162,17 +167,75 @@ function jsonpOnce(url) {
 async function apiRequest({ baseUrl, token }, action, payload) {
   if (!baseUrl) throw new Error('Please set the Apps Script Web App URL in Settings.');
 
+  // Detect backends
+  const isAppsScriptHost = /script\.googleusercontent\.com|script\.google\.com/i.test(baseUrl);
+  const isYandexApiGw = /\.apigw\.yandexcloud\.net/i.test(baseUrl);
+
+  // Reads = GET, writes = POST (for Apps Script JSONP path we still pack payload into query)
+  const isRead = /^list/i.test(action);
+  const method = isRead ? 'GET' : 'POST';
+
+  // --- Fast path for our Yandex API Gateway proxy ---------------------------------
+  // The YC function expects a POST to /proxy with JSON body { action, payload, token }.
+  if (isYandexApiGw) {
+    const url = baseUrl.replace(/\/$/, '') + '/proxy';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      mode: 'cors',
+      body: JSON.stringify({ action, payload: payload || {}, token }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
+
+  // --- Generic CORS-friendly fetch for non-Apps-Script hosts ----------------------
+  async function tryFetchOnce() {
+    const url = new URL(baseUrl);
+    // For fetch backends that understand query params (kept for compatibility):
+    if (token) url.searchParams.set('token', token);
+    url.searchParams.set('action', action);
+
+    const init = { mode: 'cors', method };
+    if (method === 'POST') {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify({ payload });
+    }
+
+    const res = await fetch(url.toString(), init);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
+
+  // If it is not an Apps Script host, prefer direct fetch first; fall back to JSONP if CORS blocks us.
+  if (!isAppsScriptHost) {
+    try {
+      return await tryFetchOnce();
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e; // Network/HTTP error — rethrow
+      // Else TypeError likely due to CORS — fall through to JSONP path below.
+    }
+  }
+
+  // --- Apps Script JSONP path (bypasses CORS) ------------------------------------
   const qp = new URLSearchParams();
   if (token) qp.set('token', token);
   qp.set('action', action);
-  if (payload && Object.keys(payload).length) qp.set('payload', JSON.stringify(payload));
 
-  // Prefer googleusercontent; fall back to script.google.com in case an extension blocks it
+  // Prefer googleusercontent; fall back to script.google.com
   const prefer = baseUrl.replace('script.google.com', 'script.googleusercontent.com');
   const fallback = baseUrl;
 
-  const url1 = `${prefer}${prefer.includes('?') ? '&' : '?'}${qp.toString()}`;
-  const url2 = `${fallback}${fallback.includes('?') ? '&' : '?'}${qp.toString()}`;
+  const url1 =
+    `${prefer}${prefer.includes('?') ? '&' : '?'}${qp.toString()}` +
+    (isRead ? '' : `&payload=${encodeURIComponent(JSON.stringify(payload || {}))}`);
+  const url2 =
+    `${fallback}${fallback.includes('?') ? '&' : '?'}${qp.toString()}` +
+    (isRead ? '' : `&payload=${encodeURIComponent(JSON.stringify(payload || {}))}`);
 
   try {
     const data = await jsonpOnce(url1);
@@ -184,9 +247,10 @@ async function apiRequest({ baseUrl, token }, action, payload) {
       if (data && data.error) throw new Error(data.error);
       return data;
     } catch (e2) {
-      const hint = (e1.message.includes('network') || e2.message.includes('network'))
-        ? ' A browser extension might be blocking script.googleusercontent.com on this domain. Try disabling it for this site.'
-        : '';
+      const hint =
+        (String(e1?.message || '').includes('network') || String(e2?.message || '').includes('network'))
+          ? ' A browser extension might be blocking script.googleusercontent.com on this domain. Try disabling it for this site.'
+          : '';
       throw new Error(`JSONP failed (${e1.message}); fallback failed (${e2.message}).${hint}`);
     }
   }
@@ -571,7 +635,7 @@ function SettingsModal({ open, onClose, settings, setSettings }) {
             <span className="text-sm text-neutral-300">API token</span>
             <Input value={token} onChange={e=>setToken(e.target.value)} placeholder="Your shared secret" className="bg-neutral-950 border-neutral-800"/>
           </div>
-          <div className="text-xs text-neutral-400">Paste the Web App URL from Deployments. The app uses JSONP (no CORS issues) and auto-switches the domain to <code>script.googleusercontent.com</code>.</div>
+          <div className="text-xs text-neutral-400">Use either your Google Apps Script Web App URL (we will use JSONP automatically), or the Yandex API Gateway URL (we will use normal CORS fetch).</div>
 
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={testConnection} disabled={testing}>{testing ? 'Testing…' : 'Test connection'}</Button>

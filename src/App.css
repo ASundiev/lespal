@@ -40,3 +40,21 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Make the native date picker readable in dark mode */
+input[type="date"] {
+  /* Let the browser draw controls for a dark background */
+  color-scheme: dark;
+}
+
+/* WebKit/Blink (Chrome/Edge/Safari) calendar icon */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+  opacity: 1; /* ensure not semi-transparent */
+}
+
+/* Also brighten the clear/spinner icons (Safari/WebKit) */
+input[type="date"]::-webkit-clear-button,
+input[type="date"]::-webkit-inner-spin-button {
+  filter: invert(1) brightness(1.2);
+}

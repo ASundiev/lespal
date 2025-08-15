@@ -121,39 +121,75 @@ function Header({ tab, setTab, openSettings, onRefresh }) {
 // API client (Google Apps Script)
 // ---------------------------
 // Use JSONP to bypass CORS for Apps Script web apps.
-function jsonp(url) {
+// More robust version with domain fallback.
+function jsonpOnce(url) {
   return new Promise((resolve, reject) => {
     const cb = `__lespal_cb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const sep = url.includes('?') ? '&' : '?';
     const full = `${url}${sep}callback=${cb}`;
     const script = document.createElement('script');
+    let done = false;
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error('JSONP timeout'));
     }, 15000);
-    function cleanup(){
+
+    function cleanup() {
       clearTimeout(timer);
-      delete window[cb];
-      script.remove();
+      try { delete window[cb]; } catch (_) { window[cb] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
     }
-    window[cb] = (data) => { cleanup(); resolve(data); };
-    script.onerror = () => { cleanup(); reject(new Error('JSONP network error')); };
+
+    window[cb] = (data) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(new Error('JSONP network error'));
+    };
+
     script.src = full;
     document.head.appendChild(script);
   });
 }
 
 async function apiRequest({ baseUrl, token }, action, payload) {
-  if (!baseUrl) throw new Error("Please set the Apps Script Web App URL in Settings.");
-  const normalized = baseUrl.replace('script.google.com', 'script.googleusercontent.com');
+  if (!baseUrl) throw new Error('Please set the Apps Script Web App URL in Settings.');
+
   const qp = new URLSearchParams();
   if (token) qp.set('token', token);
   qp.set('action', action);
   if (payload && Object.keys(payload).length) qp.set('payload', JSON.stringify(payload));
-  const url = `${normalized}${normalized.includes('?') ? '&' : '?'}${qp.toString()}`;
-  const data = await jsonp(url);
-  if (data && data.error) throw new Error(data.error);
-  return data;
+
+  // Prefer googleusercontent; fall back to script.google.com in case an extension blocks it
+  const prefer = baseUrl.replace('script.google.com', 'script.googleusercontent.com');
+  const fallback = baseUrl;
+
+  const url1 = `${prefer}${prefer.includes('?') ? '&' : '?'}${qp.toString()}`;
+  const url2 = `${fallback}${fallback.includes('?') ? '&' : '?'}${qp.toString()}`;
+
+  try {
+    const data = await jsonpOnce(url1);
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  } catch (e1) {
+    try {
+      const data = await jsonpOnce(url2);
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    } catch (e2) {
+      const hint = (e1.message.includes('network') || e2.message.includes('network'))
+        ? ' A browser extension might be blocking script.googleusercontent.com on this domain. Try disabling it for this site.'
+        : '';
+      throw new Error(`JSONP failed (${e1.message}); fallback failed (${e2.message}).${hint}`);
+    }
+  }
 }
 
 // ---------------------------
@@ -500,7 +536,21 @@ function SettingsModal({ open, onClose, settings, setSettings }) {
       const count = Array.isArray(data?.songs) ? data.songs.length : 0;
       setTestResult(`✅ Connected. Songs: ${count}`);
     } catch (e) {
-      setTestResult(`❌ ${e.message}`);
+      // Friendlier guidance when browser extensions block JSONP on GitHub Pages
+      const msg = String(e?.message || "");
+      const looksBlocked =
+        msg.includes("JSONP network error") ||
+        msg.includes("ERR_BLOCKED_BY_CLIENT") ||
+        msg.includes("net::ERR_BLOCKED_BY_CLIENT");
+      if (looksBlocked && typeof location !== 'undefined' && location.hostname.endsWith('.github.io')) {
+        setTestResult(
+          "❌ Request was blocked by a browser extension on this domain. " +
+          "Try one of these: disable uBlock/AdGuard/ABP/Privacy Badger for this site, " +
+          "add an allow-rule for script.googleusercontent.com & script.google.com, or open in Incognito."
+        );
+      } else {
+        setTestResult(`❌ ${msg}`);
+      }
     } finally {
       setTesting(false);
     }

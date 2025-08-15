@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure the app can occupy the full viewport */
+html, body, #root {
+  height: 100%;
+}
+
+/* Optional: remove any user-agent margins */
+body {
+  margin: 0;
+}

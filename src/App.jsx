@@ -204,6 +204,33 @@ async function apiRequest({ baseUrl, token }, action, payload) {
 // ---------------------------
 // LESSONS
 // ---------------------------
+// Dedupe songs for the lesson picker: one line per (title, artist).
+function buildPickerSongs(rawSongs = []) {
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const byKey = new Map();
+
+  for (const s of rawSongs) {
+    const key = `${norm(s.title)}||${norm(s.artist)}`;
+    const createdAt = new Date(s.created_at || 0).getTime();
+
+    if (!byKey.has(key)) {
+      byKey.set(key, { ...s, _createdAtTs: createdAt });
+      continue;
+    }
+    // Choose a canonical representative deterministically.
+    const cur = byKey.get(key);
+    if (
+      (createdAt && cur._createdAtTs && createdAt < cur._createdAtTs) ||
+      (!cur._createdAtTs && createdAt) ||
+      (createdAt === cur._CreatedAtTs && String(s.id) < String(cur.id))
+    ) {
+      byKey.set(key, { ...s, _createdAtTs: createdAt });
+    }
+  }
+
+  return Array.from(byKey.values()).map(({ _createdAtTs, ...rest }) => rest);
+}
+
 function AddLessonModal({ open, onClose, onCreate, songs }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
   const [notes, setNotes] = useState("");
@@ -212,7 +239,8 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = songs.filter(s => (`${s.title||""} ${s.artist||""}`).toLowerCase().includes(q.toLowerCase()));
+  const pickerSongs = useMemo(() => buildPickerSongs(songs || []), [songs]);
+  const filtered = pickerSongs.filter(s => (`${s.title||""} ${s.artist||""}`).toLowerCase().includes(q.toLowerCase()));
 
   function toggleSong(id) {
     setSelectedSongIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
@@ -247,7 +275,7 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
             <div className="bg-neutral-950 border border-neutral-800 rounded px-2 py-1 min-h-[2.5rem] flex flex-wrap gap-1 items-center" onClick={()=>setPickerOpen(v=>!v)}>
               {selectedSongIds.length === 0 && <span className="text-sm text-neutral-400">Select songs…</span>}
               {selectedSongIds.map(id => {
-                const s = songs.find(x => String(x.id) === String(id));
+                const s = pickerSongs.find(x => String(x.id) === String(id)) || songs.find(x => String(x.id) === String(id));
                 const label = s ? `${s.title} — ${s.artist}` : `#${id}`;
                 return <Badge variant="outline" className="border-neutral-700 text-neutral-200 text-xs">{label}</Badge>;
               })}

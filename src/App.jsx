@@ -61,6 +61,32 @@ const ls = {
   }
 };
 
+function TabsNav({ tab, setTab }) {
+  function Item({ value, children }) {
+    const active = tab === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setTab(value)}
+        className={
+          `h-9 px-3 rounded-md text-sm transition-colors border ` +
+          (active
+            ? `bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500`
+            : `bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-900/60`)
+        }
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Item value="lessons">Lessons</Item>
+      <Item value="songs">Songs</Item>
+    </div>
+  );
+}
+
 const SETTINGS_KEY = "lespal_settings_v1";
 
 function useSettings() {
@@ -70,11 +96,6 @@ function useSettings() {
 }
 
 function Header({ tab, setTab, openSettings, onRefresh }) {
-  const TabBtn = ({ active, children, onClick }) => (
-    <Button onClick={onClick} className={`px-3 transition-colors ${active ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-900/60'}`}>
-      {children}
-    </Button>
-  );
   return (
     <div className="sticky top-0 z-30 bg-neutral-950/80 backdrop-blur border-b border-neutral-800">
       <div className="mx-auto max-w-5xl px-3">
@@ -85,10 +106,6 @@ function Header({ tab, setTab, openSettings, onRefresh }) {
             className="h-10 w-auto select-none"
             draggable={false}
           />
-          <div className="flex items-center gap-2">
-            <TabBtn active={tab==='lessons'} onClick={()=>setTab('lessons')}>Lessons</TabBtn>
-            <TabBtn active={tab==='songs'} onClick={()=>setTab('songs')}>Songs</TabBtn>
-          </div>
           <TooltipProvider>
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -321,12 +338,12 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
   );
 }
 
-function LessonsTab({ items, loading, onAdd, onRefresh, songs }) {
+function LessonsTab({ items, loading, onAdd, onRefresh, songs, tab, setTab }) {
   const songById = useMemo(() => Object.fromEntries((songs||[]).map(s=>[String(s.id), s])), [songs]);
   return (
     <div className="mx-auto max-w-5xl p-3 space-y-3">
       <div className="flex justify-between items-center">
-        <div className="text-lg font-medium">Lessons</div>
+        <TabsNav tab={tab} setTab={setTab} />
         <div className="flex items-center gap-2">
           <Button onClick={onAdd} className="bg-indigo-600 text-white hover:bg-indigo-500">+ Add lesson</Button>
         </div>
@@ -465,7 +482,7 @@ function AddSongModal({ open, onClose, onCreate }) {
   );
 }
 
-function SongsTab({ items, loading, onAdd, onRefresh }) {
+function SongsTab({ items, loading, onAdd, onRefresh, tab, setTab }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState(""); // blank = all
 
@@ -508,7 +525,7 @@ function SongsTab({ items, loading, onAdd, onRefresh }) {
   return (
     <div className="mx-auto max-w-5xl p-3 space-y-3">
       <div className="flex flex-wrap gap-2 items-center justify-between">
-        <div className="text-lg font-medium">Songs</div>
+        <TabsNav tab={tab} setTab={setTab} />
         <div className="flex items-center gap-2">
           <Input placeholder="Quick search…" value={q} onChange={e=>setQ(e.target.value)} className="w-48 bg-neutral-950 border-neutral-800 text-neutral-100 placeholder:text-neutral-500"/>
           <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded px-2 py-2 text-neutral-100">
@@ -693,13 +710,13 @@ export default function App() {
       <Header tab={tab} setTab={setTab} openSettings={()=>setShowSettings(true)} onRefresh={()=> (tab==='lessons' ? loadLessons(true) : loadSongs(true)) } />
       {tab === 'lessons' && (
         <>
-          <LessonsTab items={lessons} loading={loadingLessons} onAdd={()=>setOpenAddLesson(true)} onRefresh={()=>loadLessons(true)} songs={songs} />
+          <LessonsTab items={lessons} loading={loadingLessons} onAdd={()=>setOpenAddLesson(true)} onRefresh={()=>loadLessons(true)} songs={songs} tab={tab} setTab={setTab} />
           <AddLessonModal open={openAddLesson} onClose={()=>setOpenAddLesson(false)} onCreate={handleCreateLesson} songs={songs} />
         </>
       )}
       {tab === 'songs' && (
         <>
-          <SongsTab items={songs} loading={loadingSongs} onAdd={()=>setOpenAddSong(true)} onRefresh={()=>loadSongs(true)} />
+          <SongsTab items={songs} loading={loadingSongs} onAdd={()=>setOpenAddSong(true)} onRefresh={()=>loadSongs(true)} tab={tab} setTab={setTab} />
           <AddSongModal open={openAddSong} onClose={()=>setOpenAddSong(false)} onCreate={handleCreateSong} />
         </>
       )}

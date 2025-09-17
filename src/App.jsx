@@ -563,7 +563,7 @@ function SongsTab({ items, loading, onAdd, onRefresh }) {
         const list = grouped.get(st) || [];
         if (list.length === 0) return null;
         return (
-          <div key={st} className="space-y-2 mt-4">
+          <div key={st} className="space-y-2 mt-8">
             <h2 className="text-lg font-semibold text-neutral-200">{STATUS_LABELS[st]}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {list.map(s => (

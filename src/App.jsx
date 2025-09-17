@@ -504,7 +504,6 @@ function AddSongModal({ open, onClose, onCreate }) {
 
 function SongsTab({ items, loading, onAdd, onRefresh }) {
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState(""); // blank = all
 
   // --- Aggregate duplicates (same title+artist) into one card with multiple statuses ---
   const aggregated = useMemo(() => {
@@ -536,53 +535,68 @@ function SongsTab({ items, loading, onAdd, onRefresh }) {
   }, [items]);
 
   const visible = aggregated.filter(s => {
-    const okFilter = !filter || s.statuses.includes(filter);
     const hay = `${s.title||""} ${s.artist||""}`.toLowerCase();
-    const okQ = !q || hay.includes(q.toLowerCase());
-    return okFilter && okQ;
+    return !q || hay.includes(q.toLowerCase());
   });
+
+  const STATUS_LABELS = { rehearsing: "Rehearsing", want: "Want", studied: "Studied", recorded: "Recorded" };
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const st of ["rehearsing","want","studied","recorded"]) map.set(st, []);
+    for (const s of visible) {
+      for (const st of s.statuses || []) {
+        if (map.has(st)) map.get(st).push(s);
+      }
+    }
+    return map;
+  }, [visible]);
 
   return (
     <div className="mx-auto max-w-5xl p-3 space-y-3">
       <div className="flex flex-wrap gap-2 items-center justify-end">
         <Input placeholder="Quick search…" value={q} onChange={e=>setQ(e.target.value)} className="w-48 bg-neutral-950 border-neutral-800 text-neutral-100 placeholder:text-neutral-500"/>
-        <select value={filter} onChange={e=>setFilter(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded px-2 py-2 text-neutral-100">
-          <option value="">All</option>
-          {SONG_STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}
-        </select>
         <Button onClick={onAdd} className="bg-indigo-600 text-white hover:bg-indigo-500">+ Add song</Button>
       </div>
       {loading ? <div className="text-sm text-neutral-400">Loading…</div> : null}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {visible.map(s => (
-          <Card key={s.id} className="bg-neutral-900 border-neutral-800">
-            <CardContent className="p-3 flex gap-3">
-              <div className="w-20 h-20 rounded overflow-hidden bg-neutral-800 flex-shrink-0">
-                {s.artwork_url ? (<img src={s.artwork_url} alt="cover" className="w-full h-full object-cover"/>) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs text-neutral-400">no cover</div>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="font-medium text-neutral-100 truncate">{s.title}</div>
-                <div className="text-sm text-neutral-400 truncate">{s.artist}</div>
-                {s.statuses?.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                    {s.statuses.map(st => (
-                      <Badge key={st} variant="outline" className="border-neutral-700 text-neutral-200">{st}</Badge>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  {s.tabs_link && <a className="underline" href={s.tabs_link} target="_blank" rel="noreferrer">Tabs</a>}
-                  {s.video_link && <a className="underline" href={s.video_link} target="_blank" rel="noreferrer">Video</a>}
-                  {s.recording_link && <a className="underline" href={s.recording_link} target="_blank" rel="noreferrer">Recording</a>}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {["rehearsing","want","studied","recorded"].map((st) => {
+        const list = grouped.get(st) || [];
+        if (list.length === 0) return null;
+        return (
+          <div key={st} className="space-y-2 mt-4">
+            <h2 className="text-lg font-semibold text-neutral-200">{STATUS_LABELS[st]}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {list.map(s => (
+                <Card key={`${st}-${s.id}`} className="bg-neutral-900 border-neutral-800">
+                  <CardContent className="p-3 flex gap-3">
+                    <div className="w-20 h-20 rounded overflow-hidden bg-neutral-800 flex-shrink-0">
+                      {s.artwork_url ? (<img src={s.artwork_url} alt="cover" className="w-full h-full object-cover"/>) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-neutral-400">no cover</div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-medium text-neutral-100 truncate">{s.title}</div>
+                      <div className="text-sm text-neutral-400 truncate">{s.artist}</div>
+                      {s.statuses?.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                          {s.statuses.map(st2 => (
+                            <Badge key={st2} variant="outline" className="border-neutral-700 text-neutral-200">{st2}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        {s.tabs_link && <a className="underline" href={s.tabs_link} target="_blank" rel="noreferrer">Tabs</a>}
+                        {s.video_link && <a className="underline" href={s.video_link} target="_blank" rel="noreferrer">Video</a>}
+                        {s.recording_link && <a className="underline" href={s.recording_link} target="_blank" rel="noreferrer">Recording</a>}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

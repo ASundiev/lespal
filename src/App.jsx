@@ -178,6 +178,7 @@ async function apiRequest({ baseUrl, token }, action, payload) {
     listLessons: { path: 'lessons', method: 'GET'  },
     createSong:  { path: 'songs',   method: 'POST' },
     createLesson:{ path: 'lessons', method: 'POST' },
+    updateLesson:{ path: 'lessons', method: 'POST' },
   };
   const cfg = ACTIONS[action] || { path: '', method: 'GET' };
 
@@ -236,11 +237,28 @@ function buildPickerSongs(rawSongs = []) {
   return Array.from(byKey.values()).map(({ _createdAtTs, ...rest }) => rest);
 }
 
-function AddLessonModal({ open, onClose, onCreate, songs }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
-  const [notes, setNotes] = useState("");
-  const [remainingLessons, setRemainingLessons] = useState("");
-  const [selectedSongIds, setSelectedSongIds] = useState([]);
+function toISODateInput(val){
+  if (!val) return new Date().toISOString().slice(0,10);
+  if (typeof val === 'number') return new Date(Math.round((val - 25569) * 86400 * 1000)).toISOString().slice(0,10);
+  const d = new Date(val);
+  return isNaN(d) ? new Date().toISOString().slice(0,10) : d.toISOString().slice(0,10);
+}
+
+function AddLessonModal({ open, onClose, onSubmit, songs, initial }) {
+  const isEdit = !!initial;
+  const [date, setDate] = useState(toISODateInput(initial?.date));
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [remainingLessons, setRemainingLessons] = useState(initial?.remaining_lessons ?? "");
+  const [selectedSongIds, setSelectedSongIds] = useState(
+    (initial?.topics ? String(initial.topics).split(',').filter(Boolean) : [])
+  );
+
+  useEffect(() => {
+    setDate(toISODateInput(initial?.date));
+    setNotes(initial?.notes ?? "");
+    setRemainingLessons(initial?.remaining_lessons ?? "");
+    setSelectedSongIds(initial?.topics ? String(initial.topics).split(',').filter(Boolean) : []);
+  }, [initial?.id, open]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -258,7 +276,7 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
     <Dialog open={open} onOpenChange={(v)=>{ if(!v) onClose(); }}>
       <DialogContent className="sm:max-w-2xl bg-neutral-900 text-neutral-100 border-neutral-800">
         <DialogHeader>
-          <DialogTitle>Add Lesson</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit lesson' : 'Add lesson'}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-1">
@@ -267,14 +285,14 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
           </div>
           <div className="grid gap-1">
             <span className="text-sm text-neutral-300">Notes</span>
-            <Textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={5} placeholder="Type multi‑line notes…" className="bg-neutral-950 border-neutral-800"/>
+            <Textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={5} placeholder="Type multi-line notes…" className="bg-neutral-950 border-neutral-800"/>
           </div>
           <div className="grid gap-1">
             <span className="text-sm text-neutral-300">Remaining lessons (optional)</span>
             <Input value={remainingLessons} onChange={e=>setRemainingLessons(e.target.value)} className="bg-neutral-950 border-neutral-800"/>
           </div>
 
-          {/* Songs rehearsed — searchable multi‑select dropdown */}
+          {/* Songs rehearsed — searchable multi-select dropdown */}
           <div className="grid gap-1 relative">
             <span className="text-sm text-neutral-300">Songs rehearsed</span>
             <div className="bg-neutral-950 border border-neutral-800 rounded px-2 py-1 min-h-[2.5rem] flex flex-wrap gap-1 items-center" onClick={()=>setPickerOpen(v=>!v)}>
@@ -311,22 +329,23 @@ function AddLessonModal({ open, onClose, onCreate, songs }) {
         <DialogFooter>
           <Button variant="outline" className="border-neutral-700 text-neutral-300" onClick={()=>{ reset(); onClose(); }}>Cancel</Button>
           <Button className="bg-indigo-600 text-white hover:bg-indigo-500" onClick={() => {
-            onCreate({
+            onSubmit({
+              ...(isEdit ? { id: initial.id } : {}),
               date,
               notes,
-              topics: selectedSongIds.join(","),
+              topics: selectedSongIds.join(','),
               remaining_lessons: remainingLessons
             });
             reset();
             onClose();
-          }}>Save</Button>
+          }}>{isEdit ? 'Save' : 'Add'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function LessonsTab({ items, loading, onAdd, onRefresh, songs }) {
+function LessonsTab({ items, loading, onAdd, onRefresh, songs, onEdit }) {
   const songById = useMemo(() => Object.fromEntries((songs||[]).map(s=>[String(s.id), s])), [songs]);
   return (
     <div className="mx-auto max-w-5xl p-3 space-y-3">
@@ -343,7 +362,18 @@ function LessonsTab({ items, loading, onAdd, onRefresh, songs }) {
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-center text-sm text-neutral-400">
                   <div>{formatDateOnly(l.date)}</div>
-                  {l.remaining_lessons && <div>Remaining: {l.remaining_lessons}</div>}
+                  <div className="flex items-center gap-2">
+                    {l.remaining_lessons && <div>Remaining: {l.remaining_lessons}</div>}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Edit lesson"
+                      onClick={()=> onEdit(l)}
+                      className="text-neutral-300 hover:bg-neutral-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -638,7 +668,8 @@ export default function App() {
   const [lessons, setLessons] = useState(initialCache.lessons || []);
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [loadingLessons, setLoadingLessons] = useState(false);
-  const [openAddLesson, setOpenAddLesson] = useState(false);
+  const [openLessonModal, setOpenLessonModal] = useState(false);
+  const [editingLesson, setEditingLesson] = useState(null);
   const [openAddSong, setOpenAddSong] = useState(false);
 
   function saveCache(next){ ls.set(CACHE_KEY, next); }
@@ -683,8 +714,18 @@ export default function App() {
   const handleCreateSong = async (payload) => {
     try { await apiRequest(settings, 'createSong', payload); await loadSongs(true); } catch (e) { alert(e.message); }
   };
-  const handleCreateLesson = async (payload) => {
-    try { await apiRequest(settings, 'createLesson', payload); await loadLessons(true); } catch (e) { alert(e.message); }
+
+  const handleUpsertLesson = async (payload) => {
+    const isEdit = !!payload.id;
+    try {
+      if (isEdit) {
+        await apiRequest(settings, 'updateLesson', payload);
+        await loadLessons(true);
+      } else {
+        await apiRequest(settings, 'createLesson', payload);
+        await loadLessons(true);
+      }
+    } catch (e) { alert(e.message); }
   };
 
   return (
@@ -692,8 +733,21 @@ export default function App() {
       <Header tab={tab} setTab={setTab} openSettings={()=>setShowSettings(true)} onRefresh={()=> (tab==='lessons' ? loadLessons(true) : loadSongs(true)) } />
       {tab === 'lessons' && (
         <>
-          <LessonsTab items={lessons} loading={loadingLessons} onAdd={()=>setOpenAddLesson(true)} onRefresh={()=>loadLessons(true)} songs={songs} />
-          <AddLessonModal open={openAddLesson} onClose={()=>setOpenAddLesson(false)} onCreate={handleCreateLesson} songs={songs} />
+          <LessonsTab
+            items={lessons}
+            loading={loadingLessons}
+            onAdd={()=>{ setEditingLesson(null); setOpenLessonModal(true); }}
+            onRefresh={()=>loadLessons(true)}
+            songs={songs}
+            onEdit={(l)=>{ setEditingLesson(l); setOpenLessonModal(true); }}
+          />
+          <AddLessonModal
+            open={openLessonModal}
+            onClose={()=>setOpenLessonModal(false)}
+            onSubmit={handleUpsertLesson}
+            songs={songs}
+            initial={editingLesson}
+          />
         </>
       )}
       {tab === 'songs' && (

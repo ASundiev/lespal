@@ -177,6 +177,7 @@ async function apiRequest({ baseUrl, token }, action, payload) {
     listSongs:   { path: 'songs',   method: 'GET'  },
     listLessons: { path: 'lessons', method: 'GET'  },
     createSong:  { path: 'songs',   method: 'POST' },
+    updateSong:  { path: 'songs',   method: 'POST' },
     createLesson:{ path: 'lessons', method: 'POST' },
     updateLesson:{ path: 'lessons', method: 'POST' },
   };
@@ -358,7 +359,7 @@ function LessonsTab({ items, loading, onAdd, onRefresh, songs, onEdit }) {
           const ids = String(l.topics||"").split(",").filter(Boolean);
           const songChips = ids.map(id => songById[id]?.title ? `${songById[id].title} — ${songById[id].artist}` : `#${id}`);
           return (
-            <Card key={l.id} className="bg-neutral-900 border-neutral-800">
+            <Card key={l.id} className="bg-neutral-900 border-neutral-800 group">
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-center text-sm text-neutral-400">
                   <div>{formatDateOnly(l.date)}</div>
@@ -384,7 +385,7 @@ function LessonsTab({ items, loading, onAdd, onRefresh, songs, onEdit }) {
                     size="icon"
                     aria-label="Edit lesson"
                     onClick={()=> onEdit(l)}
-                    className="text-neutral-300 hover:bg-neutral-800"
+                    className="text-neutral-300 hover:bg-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 20h9"/>
@@ -418,27 +419,43 @@ async function findArtworkUrl(artist, title) {
   return artwork100.replace(/100x100bb\.jpg$/, "512x512bb.jpg");
 }
 
-function AddSongModal({ open, onClose, onCreate }) {
-  const [title, setTitle] = useState("");
-  const [artist, setArtist] = useState("");
-  const [status, setStatus] = useState(SONG_STATUSES[0]);
-  const [tabsLink, setTabsLink] = useState("");
-  const [videoLink, setVideoLink] = useState("");
-  const [recordingLink, setRecordingLink] = useState("");
-  const [artworkUrl, setArtworkUrl] = useState("");
-  const [notes, setNotes] = useState("");
+function AddSongModal({ open, onClose, onSubmit, initial }) {
+  const isEdit = !!initial;
+
+  const [title, setTitle] = useState(initial?.title || "");
+  const [artist, setArtist] = useState(initial?.artist || "");
+  const [status, setStatus] = useState(initial?.status || SONG_STATUSES[0]);
+  const [tabsLink, setTabsLink] = useState(initial?.tabs_link || "");
+  const [videoLink, setVideoLink] = useState(initial?.video_link || "");
+  const [recordingLink, setRecordingLink] = useState(initial?.recording_link || "");
+  const [artworkUrl, setArtworkUrl] = useState(initial?.artwork_url || "");
+  const [notes, setNotes] = useState(initial?.notes || "");
   const [fetchingCover, setFetchingCover] = useState(false);
 
+  useEffect(() => {
+    setTitle(initial?.title || "");
+    setArtist(initial?.artist || "");
+    setStatus(initial?.status || SONG_STATUSES[0]);
+    setTabsLink(initial?.tabs_link || "");
+    setVideoLink(initial?.video_link || "");
+    setRecordingLink(initial?.recording_link || "");
+    setArtworkUrl(initial?.artwork_url || "");
+    setNotes(initial?.notes || "");
+  }, [initial?.id, open]);
+
   function reset() {
-    setTitle(""); setArtist(""); setStatus(SONG_STATUSES[0]); setTabsLink(""); setVideoLink(""); setRecordingLink(""); setArtworkUrl(""); setNotes("");
+    setTitle(""); setArtist(""); setStatus(SONG_STATUSES[0]);
+    setTabsLink(""); setVideoLink(""); setRecordingLink("");
+    setArtworkUrl(""); setNotes("");
   }
 
   return (
     <Dialog open={open} onOpenChange={(v)=>{ if(!v) onClose(); }}>
       <DialogContent className="sm:max-w-2xl bg-neutral-900 text-neutral-100 border-neutral-800">
         <DialogHeader>
-          <DialogTitle>Add Song</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Song" : "Add Song"}</DialogTitle>
         </DialogHeader>
+
         <div className="grid gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="grid gap-1">
@@ -450,13 +467,14 @@ function AddSongModal({ open, onClose, onCreate }) {
               <Input value={artist} onChange={e=>setArtist(e.target.value)} className="bg-neutral-950 border-neutral-800"/>
             </div>
           </div>
+
           <div className="grid gap-1">
             <span className="text-sm text-neutral-300">Status</span>
-            {/* keep native select for exact behavior */}
             <select value={status} onChange={e=>setStatus(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded px-2 py-2 text-neutral-100">
               {SONG_STATUSES.map(s=> <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="grid gap-1">
               <span className="text-sm text-neutral-300">Tabs link</span>
@@ -471,10 +489,11 @@ function AddSongModal({ open, onClose, onCreate }) {
               <Input value={recordingLink} onChange={e=>setRecordingLink(e.target.value)} className="bg-neutral-950 border-neutral-800"/>
             </div>
           </div>
+
           <div className="grid md:grid-cols-3 gap-3 items-end">
             <div className="grid gap-1 md:col-span-2">
               <span className="text-sm text-neutral-300">Artwork URL</span>
-              <Input value={artworkUrl} onChange={e=>setArtworkUrl(e.target.value)} className="bg-neutral-950 border-neutral-800" placeholder="Will try to auto‑fill from Apple Music"/>
+              <Input value={artworkUrl} onChange={e=>setArtworkUrl(e.target.value)} className="bg-neutral-950 border-neutral-800" placeholder="Will try to auto-fill from Apple Music"/>
             </div>
             <Button variant="outline" onClick={async()=>{
               try {
@@ -484,25 +503,32 @@ function AddSongModal({ open, onClose, onCreate }) {
               } finally { setFetchingCover(false); }
             }}>{fetchingCover? 'Searching…' : 'Fetch cover'}</Button>
           </div>
+
           <div className="grid gap-1">
             <span className="text-sm text-neutral-300">Notes</span>
             <Textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={4} className="bg-neutral-950 border-neutral-800"/>
           </div>
         </div>
+
         <DialogFooter>
           <Button variant="outline" className="border-neutral-700 text-neutral-300" onClick={()=>{ reset(); onClose(); }}>Cancel</Button>
           <Button className="bg-indigo-600 text-white hover:bg-indigo-500" onClick={()=>{
-            onCreate({ title, artist, status, tabs_link: tabsLink, video_link: videoLink, recording_link: recordingLink, artwork_url: artworkUrl, notes });
+            onSubmit({
+              ...(isEdit ? { id: initial.id } : {}),
+              title, artist, status,
+              tabs_link: tabsLink, video_link: videoLink, recording_link: recordingLink,
+              artwork_url: artworkUrl, notes
+            });
             reset();
             onClose();
-          }}>Save</Button>
+          }}>{isEdit ? "Save" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function SongsTab({ items, loading, onAdd, onRefresh }) {
+function SongsTab({ items, loading, onAdd, onRefresh, onEdit }) {
   const [q, setQ] = useState("");
 
   // --- Aggregate duplicates (same title+artist) into one card with multiple statuses ---
@@ -567,7 +593,7 @@ function SongsTab({ items, loading, onAdd, onRefresh }) {
             <h2 className="text-lg font-semibold text-neutral-200">{STATUS_LABELS[st]}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {list.map(s => (
-                <Card key={`${st}-${s.id}`} className="bg-neutral-900 border-neutral-800">
+                <Card key={`${st}-${s.id}`} className="bg-neutral-900 border-neutral-800 relative group">
                   <CardContent className="p-3 flex gap-3">
                     <div className="w-20 h-20 rounded overflow-hidden bg-neutral-800 flex-shrink-0">
                       {s.artwork_url ? (<img src={s.artwork_url} alt="cover" className="w-full h-full object-cover"/>) : (
@@ -591,7 +617,20 @@ function SongsTab({ items, loading, onAdd, onRefresh }) {
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+              
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Edit song"
+                  onClick={() => onEdit(s)}
+                  className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-neutral-300 hover:bg-neutral-800"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  </svg>
+                </Button>
+              </Card>
               ))}
             </div>
           </div>
@@ -690,6 +729,7 @@ export default function App() {
   const [openLessonModal, setOpenLessonModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [openAddSong, setOpenAddSong] = useState(false);
+  const [editingSong, setEditingSong] = useState(null);
 
   function saveCache(next){ ls.set(CACHE_KEY, next); }
   const STALE_MS = 2 * 60 * 1000; // 2 minutes
@@ -730,9 +770,16 @@ export default function App() {
   useEffect(() => { loadSongs(true); loadLessons(true); }, [settings.baseUrl, settings.token]);
 
   // Create handlers (update cache immediately by reloading fresh)
-  const handleCreateSong = async (payload) => {
-    try { await apiRequest(settings, 'createSong', payload); await loadSongs(true); } catch (e) { alert(e.message); }
-  };
+  const handleUpsertSong = async (payload) => {
+    try {
+      if (payload?.id) {
+        await apiRequest(settings, 'updateSong', payload);
+      } else {
+        await apiRequest(settings, 'createSong', payload);
+      }
+      await loadSongs(true);
+    } catch (e) { alert(e.message); }
+ };
 
   const handleUpsertLesson = async (payload) => {
     const isEdit = !!payload.id;
@@ -771,8 +818,19 @@ export default function App() {
       )}
       {tab === 'songs' && (
         <>
-          <SongsTab items={songs} loading={loadingSongs} onAdd={()=>setOpenAddSong(true)} onRefresh={()=>loadSongs(true)} />
-          <AddSongModal open={openAddSong} onClose={()=>setOpenAddSong(false)} onCreate={handleCreateSong} />
+           <SongsTab
+            items={songs}
+            loading={loadingSongs}
+            onAdd={()=>{ setEditingSong(null); setOpenAddSong(true); }}
+            onRefresh={()=>loadSongs(true)}
+            onEdit={(s)=>{ setEditingSong(s); setOpenAddSong(true); }}
+          />
+          <AddSongModal
+            open={openAddSong}
+            onClose={()=>setOpenAddSong(false)}
+            onSubmit={handleUpsertSong}
+            initial={editingSong}
+          />
         </>
       )}
       <SettingsModal open={showSettings} onClose={()=>setShowSettings(false)} settings={settings} setSettings={setSettings} />

@@ -11,7 +11,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { LessonStack } from "@/components/LessonStack";
 import { AddLessonModal } from "@/components/AddLessonModal";
-import { CopyPlus, RefreshCw, Settings, ChevronLeft, ChevronRight, Share } from 'lucide-react';
+import { CopyPlus, RefreshCw, Settings, ChevronLeft, ChevronRight, Share, Search } from 'lucide-react';
+import { CategoryTabs } from "@/components/ui/CategoryTabs";
+import { SongCard } from "@/components/SongCard";
 
 // ---------------------------
 // Helpers
@@ -166,73 +168,87 @@ function AddSongModal({ open, onClose, onSubmit, initial }) {
   );
 }
 
-function SongsTab({ items, loading, onAdd, onRefresh, onEdit }) {
+function SongsTab({ items, loading, onEdit }) {
   const [q, setQ] = useState("");
+  const [activeCategory, setActiveCategory] = useState("rehearsing");
+
+  const CATEGORIES = [
+    { value: "rehearsing", label: "Rehearsing" },
+    { value: "want", label: "Want" },
+    { value: "studied", label: "Studied" },
+  ];
+
+  // Aggregate songs by title+artist to dedupe
   const aggregated = useMemo(() => {
     const map = new Map();
     const norm = (s) => (s || "").trim().toLowerCase();
     for (const s of items) {
       const key = `${norm(s.title)}||${norm(s.artist)}`;
-      if (!map.has(key)) map.set(key, { _key: key, id: s.id || key, title: s.title || "", artist: s.artist || "", statuses: new Set(), artwork_url: s.artwork_url || "", tabs_link: s.tabs_link || "", video_link: s.video_link || "", recording_link: s.recording_link || "" });
+      if (!map.has(key)) map.set(key, { _key: key, id: s.id || key, title: s.title || "", artist: s.artist || "", statuses: new Set(), artwork_url: s.artwork_url || "", tabs_link: s.tabs_link || "", video_link: s.video_link || "", recording_link: s.recording_link || "", notes: s.notes || "" });
       const g = map.get(key);
       if (s.status) g.statuses.add(String(s.status));
       if (!g.artwork_url && s.artwork_url) g.artwork_url = s.artwork_url;
       if (!g.tabs_link && s.tabs_link) g.tabs_link = s.tabs_link;
       if (!g.video_link && s.video_link) g.video_link = s.video_link;
       if (!g.recording_link && s.recording_link) g.recording_link = s.recording_link;
+      if (!g.notes && s.notes) g.notes = s.notes;
     }
     return Array.from(map.values()).map(g => ({ ...g, statuses: Array.from(g.statuses) }));
   }, [items]);
-  const visible = aggregated.filter(s => (`${s.title || ""} ${s.artist || ""}`).toLowerCase().includes(q.toLowerCase()));
-  const STATUS_LABELS = { rehearsing: "Rehearsing", want: "Want", studied: "Studied", recorded: "Recorded" };
-  const grouped = useMemo(() => {
-    const map = new Map();
-    for (const st of ["rehearsing", "want", "studied", "recorded"]) map.set(st, []);
-    for (const s of visible) {
-      for (const st of s.statuses || []) if (map.has(st)) map.get(st).push(s);
-    }
-    return map;
-  }, [visible]);
+
+  // Filter by search and category
+  const visible = useMemo(() => {
+    return aggregated.filter(s => {
+      const matchesSearch = (`${s.title || ""} ${s.artist || ""}`).toLowerCase().includes(q.toLowerCase());
+      const matchesCategory = s.statuses.includes(activeCategory);
+      return matchesSearch && matchesCategory;
+    });
+  }, [aggregated, q, activeCategory]);
 
   return (
-    <div className="mx-auto max-w-5xl p-4 space-y-4 pb-20 md:pb-4">
-      <div className="flex flex-wrap gap-2 items-center justify-end">
-        <Input placeholder="Quick search..." value={q} onChange={e => setQ(e.target.value)} className="w-48 bg-input/10 border-input" />
-        <Button onClick={onAdd} variant="default" className="shadow-none">+ Add song</Button>
+    <div className="mx-auto max-w-[1440px] px-[36px] pt-[60px] space-y-[24px] pb-20 md:pb-[24px]">
+      {/* Header Row: Tabs and Search */}
+      <div className="flex flex-wrap gap-[16px] items-center justify-between">
+        {/* Category Tabs */}
+        <CategoryTabs
+          categories={CATEGORIES}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
+        />
+
+        {/* Search Input - Glass Style */}
+        <div className="relative min-w-[120px] w-[295px]">
+          <input
+            type="text"
+            placeholder="Quick search..."
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            className="w-full bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.12)] rounded-[8px] px-[16px] py-[12px] pr-[40px] font-['Inter'] font-normal text-[14px] leading-[150%] text-[rgba(255,255,255,0.8)] placeholder-[rgba(255,255,255,0.8)] focus:outline-none focus:border-[rgba(255,255,255,0.24)]"
+          />
+          <Search size={16} className="absolute right-[16px] top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.48)]" />
+        </div>
       </div>
-      {loading ? <div className="text-sm text-muted-foreground">Loading...</div> : null}
-      {["rehearsing", "want", "studied", "recorded"].map((st) => {
-        const list = grouped.get(st) || [];
-        if (list.length === 0) return null;
-        return (
-          <div key={st} className="space-y-3 !mt-8">
-            <h2 className="text-lg font-semibold tracking-tight">{STATUS_LABELS[st]}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {list.map(s => (
-                <Card key={`${st}-${s.id}`} className="bg-card/50 border-white/5 relative group hover:border-lespal-yellow/30 transition-all hover:shadow-lg">
-                  <CardContent className="p-3 flex gap-3">
-                    <div className="w-20 h-20 rounded bg-secondary flex-shrink-0 overflow-hidden">
-                      {s.artwork_url ? <img src={s.artwork_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">no cover</div>}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-medium truncate group-hover:text-lespal-yellow transition-colors">{s.title}</div>
-                      <div className="text-sm text-muted-foreground truncate">{s.artist}</div>
-                      <div className="mt-2 flex gap-2 text-xs text-lespal-yellow">
-                        {s.tabs_link && <a href={s.tabs_link} target="_blank" rel="noreferrer" className="hover:underline">Tabs</a>}
-                        {s.video_link && <a href={s.video_link} target="_blank" rel="noreferrer" className="hover:underline">Video</a>}
-                      </div>
-                    </div>
-                  </CardContent>
-                  <Button variant="ghost" size="icon" onClick={() => onEdit(s)} className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><span className="sr-only">Edit</span>✎</Button>
-                </Card>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+
+      {/* Loading State */}
+      {loading && <div className="text-sm text-[rgba(255,255,255,0.48)]">Loading...</div>}
+
+      {/* Songs Grid - 2 columns, 12px gap */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-[12px]">
+        {visible.map(song => (
+          <SongCard key={song.id} song={song} onEdit={onEdit} />
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {!loading && visible.length === 0 && (
+        <div className="text-center py-[48px] text-[rgba(255,255,255,0.48)]">
+          No songs in this category
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ---------------------------
 // SETTINGS
@@ -455,8 +471,6 @@ export default function App() {
           <SongsTab
             items={songs}
             loading={loadingSongs}
-            onAdd={() => { setEditingSong(null); setOpenAddSong(true); }}
-            onRefresh={() => loadSongs(true)}
             onEdit={(s) => { setEditingSong(s); setOpenAddSong(true); }}
           />
         )}

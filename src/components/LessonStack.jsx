@@ -8,7 +8,12 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 export function LessonStack({ lessons, isMobile, onEdit }) {
     const [index, setIndex] = useState(0);
 
-    // If empty
+    // Mobile Swipe Logic - MUST be called before any early returns to obey Rules of Hooks
+    const x = useMotionValue(0);
+    const rotate = useTransform(x, [-200, 200], [-5, 5]); // Subtle rotation
+    const opacity = useTransform(x, [-150, 0, 150], [0.5, 1, 0.5]);
+
+    // If empty - render early return AFTER all hooks
     if (!lessons || lessons.length === 0) {
         return <div className="text-center text-white/50 py-20">No lessons found. Add one!</div>;
     }
@@ -42,11 +47,6 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
         // Exit: Swipe out to RIGHT. Rotate slightly.
         exit: { zIndex: 4, x: 500, opacity: 0, rotate: 5, transition: { duration: 0.2 } }
     };
-
-    // Mobile Swipe Logic
-    const x = useMotionValue(0);
-    const rotate = useTransform(x, [-200, 200], [-5, 5]); // Subtle rotation
-    const opacity = useTransform(x, [-150, 0, 150], [0.5, 1, 0.5]);
 
     const onDragEnd = (e, { offset, velocity }) => {
         const swipeConfidenceThreshold = 100; // Lower threshold slightly for better feel

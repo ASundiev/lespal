@@ -34,6 +34,10 @@ export default {
 			DEFAULT: "hsl(var(--popover))",
 			foreground: "hsl(var(--popover-foreground))",
 		  },
+          lespal: {
+            yellow: "#fc0",
+            dark: "#181723",
+          },
 		  card: {
 			DEFAULT: "hsl(var(--card))",
 			foreground: "hsl(var(--card-foreground))",
@@ -47,10 +51,25 @@ export default {
 		keyframes: {
 		  "accordion-down": { from: { height: 0 }, to: { height: "var(--radix-accordion-content-height)" } },
 		  "accordion-up": { from: { height: "var(--radix-accordion-content-height)" }, to: { height: 0 } },
+		  float: {
+			"0%, 100%": { transform: "translateY(0)" },
+			"50%": { transform: "translateY(-10px)" },
+		  },
+		  shimmer: {
+			from: { backgroundPosition: "0 0" },
+			to: { backgroundPosition: "-200% 0" },
+		  },
+          "pulse-slow": {
+            "0%, 100%": { opacity: 1 },
+            "50%": { opacity: 0.5 },
+          },
 		},
 		animation: {
 		  "accordion-down": "accordion-down 0.2s ease-out",
 		  "accordion-up": "accordion-up 0.2s ease-out",
+		  float: "float 6s ease-in-out infinite",
+		  shimmer: "shimmer 2s linear infinite",
+          "pulse-slow": "pulse-slow 4s ease-in-out infinite",
 		},
 	  },
 	},

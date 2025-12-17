@@ -133,6 +133,7 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
             topics: selectedSongIds.join(','),
             remaining_lessons: calculatedRemaining
         });
+        onClose();
     };
 
     // Format date for display matching lesson card: "10 Dec 2025" uppercase

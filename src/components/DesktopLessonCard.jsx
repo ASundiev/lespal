@@ -42,7 +42,7 @@ export function DesktopLessonCard({ lesson, previousCount, className, showShadow
             {/* Content */}
             <div className="p-[36px] flex-1 overflow-y-auto">
                 {/* Songs Pills */}
-                <div className="flex flex-wrap gap-[36px] mb-[36px]">
+                <div className="flex flex-wrap gap-[8px] mb-[36px]">
                     {lesson.songs && lesson.songs.map((song, i) => (
                         <Pill key={i}>{song.title} — {song.artist}</Pill>
                     ))}

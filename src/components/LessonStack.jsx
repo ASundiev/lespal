@@ -114,15 +114,12 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                     {/* Render stack. We map visible slice + 1buffer */}
                     {lessons.slice(safeIndex, safeIndex + VISIBLE_COUNT).map((lesson, i) => {
                         const isFront = i === 0;
-                        // globalIndex is safeIndex + i. 
-                        // But wait, "remaining lessons" should be "count of NEWER lessons".
-                        // If I am at index 5, there are 5 newer lessons (0-4).
-                        // So previousCount = globalIndex.
-                        const globalIndex = safeIndex + i;
+                        // Use the actual remaining_lessons value from the lesson data
+                        const remainingLessons = lesson.remaining_lessons ?? 0;
 
                         return (
                             <motion.div
-                                key={lesson.id || globalIndex} // Use ID if possible
+                                key={lesson.id || `lesson-${safeIndex + i}`} // Use ID if possible
                                 className="absolute top-0 left-0 w-full"
                                 style={{
                                     transformOrigin: "center top",
@@ -140,9 +137,9 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                                 whileTap={isMobile && isFront ? { cursor: "grabbing" } : {}}
                             >
                                 {isMobile ? (
-                                    <MobileLessonCard lesson={lesson} previousCount={globalIndex} />
+                                    <MobileLessonCard lesson={lesson} previousCount={remainingLessons} />
                                 ) : (
-                                    <DesktopLessonCard lesson={lesson} previousCount={globalIndex} showShadow={isFront} onEdit={isFront ? onEdit : undefined} />
+                                    <DesktopLessonCard lesson={lesson} previousCount={remainingLessons} showShadow={isFront} onEdit={isFront ? onEdit : undefined} />
                                 )}
                             </motion.div>
                         );

@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { LessonStack } from "@/components/LessonStack";
 import { AddLessonModal } from "@/components/AddLessonModal";
-import { CopyPlus, RefreshCw, Settings, ChevronLeft, ChevronRight, Share, Search } from 'lucide-react';
+import { CopyPlus, RefreshCw, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2 } from 'lucide-react';
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
 
@@ -138,33 +138,189 @@ function AddSongModal({ open, onClose, onSubmit, initial }) {
     setArtworkUrl(""); setNotes("");
   }
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl bg-card text-card-foreground border-border">
-        <DialogHeader><DialogTitle>{isEdit ? "Edit Song" : "Add Song"}</DialogTitle></DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="grid gap-1"><span className="text-sm text-muted-foreground">Title</span><Input value={title} onChange={e => setTitle(e.target.value)} className="bg-input/10 border-input" /></div>
-            <div className="grid gap-1"><span className="text-sm text-muted-foreground">Artist</span><Input value={artist} onChange={e => setArtist(e.target.value)} className="bg-input/10 border-input" /></div>
-          </div>
-          <div className="grid gap-1"><span className="text-sm text-muted-foreground">Status</span><select value={status} onChange={e => setStatus(e.target.value)} className="bg-input/10 border border-input rounded px-2 py-2 text-foreground">{SONG_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="grid gap-1"><span className="text-sm text-muted-foreground">Tabs link</span><Input value={tabsLink} onChange={e => setTabsLink(e.target.value)} className="bg-input/10 border-input" /></div>
-            <div className="grid gap-1"><span className="text-sm text-muted-foreground">Video link</span><Input value={videoLink} onChange={e => setVideoLink(e.target.value)} className="bg-input/10 border-input" /></div>
-            <div className="grid gap-1"><span className="text-sm text-muted-foreground">Recording link</span><Input value={recordingLink} onChange={e => setRecordingLink(e.target.value)} className="bg-input/10 border-input" /></div>
-          </div>
-          <div className="grid md:grid-cols-3 gap-3 items-end">
-            <div className="grid gap-1 md:col-span-2"><span className="text-sm text-muted-foreground">Artwork URL</span><Input value={artworkUrl} onChange={e => setArtworkUrl(e.target.value)} className="bg-input/10 border-input" placeholder="Will try to auto-fill from Apple Music" /></div>
-            <Button variant="secondary" onClick={async () => { try { setFetchingCover(true); const url = await findArtworkUrl(artist, title); if (url) setArtworkUrl(url); else alert("No cover found"); } finally { setFetchingCover(false); } }}>{fetchingCover ? 'Searching...' : 'Fetch cover'}</Button>
-          </div>
-          <div className="grid gap-1"><span className="text-sm text-muted-foreground">Notes</span><Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="bg-input/10 border-input" /></div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop with blur */}
+      <div
+        className="absolute inset-0 bg-[rgba(0,0,0,0.8)] backdrop-blur-md"
+        onClick={() => { reset(); onClose(); }}
+      />
+
+      {/* Modal Card */}
+      <div
+        className="relative z-10 w-full max-w-[720px] mx-4 rounded-[24px] overflow-hidden flex flex-col"
+        style={{
+          background: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%)',
+          border: '1px solid transparent',
+          backgroundImage: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%), linear-gradient(267.73deg, #3F3069 1.5%, #2E6449 99.17%)',
+          backgroundOrigin: 'border-box',
+          backgroundClip: 'padding-box, border-box',
+        }}
+      >
+        {/* Card Header - Static title only */}
+        <div className="flex items-center px-[24px] py-[12px] border-b border-[#2c2a30]">
+          <span className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+            {isEdit ? "Edit Song" : "Add Song"}
+          </span>
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-          <Button onClick={() => { onSubmit({ ...(isEdit ? { id: initial.id } : {}), title, artist, status, tabs_link: tabsLink, video_link: videoLink, recording_link: recordingLink, artwork_url: artworkUrl, notes }); reset(); onClose(); }}>{isEdit ? "Save" : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+        {/* Card Content */}
+        <div className="p-[36px] flex-1 flex flex-col">
+          {/* Content Container */}
+          <div className="flex flex-col gap-6 flex-1">
+            {/* Title & Artist Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                  Title
+                </label>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                  Artist
+                </label>
+                <input
+                  value={artist}
+                  onChange={e => setArtist(e.target.value)}
+                  className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+              </div>
+            </div>
+
+            {/* Status Select */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                Status
+              </label>
+              <div className="relative">
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value)}
+                  className="w-full appearance-none px-4 py-3 pr-10 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors cursor-pointer"
+                >
+                  {SONG_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronDown size={20} className="absolute right-4 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.48)] pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Links Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                  Tabs Link
+                </label>
+                <input
+                  value={tabsLink}
+                  onChange={e => setTabsLink(e.target.value)}
+                  className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                  Video Link
+                </label>
+                <input
+                  value={videoLink}
+                  onChange={e => setVideoLink(e.target.value)}
+                  className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                  Recording Link
+                </label>
+                <input
+                  value={recordingLink}
+                  onChange={e => setRecordingLink(e.target.value)}
+                  className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+              </div>
+            </div>
+
+            {/* Artwork URL with icon inside */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                Artwork URL
+              </label>
+              <div className="relative">
+                <input
+                  value={artworkUrl}
+                  onChange={e => setArtworkUrl(e.target.value)}
+                  placeholder="Will try to auto-fill from Apple Music"
+                  className="w-full px-4 py-3 pr-12 rounded-[8px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.12)] text-white font-['Inter'] text-[14px] leading-[1.5] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setFetchingCover(true);
+                      const url = await findArtworkUrl(artist, title);
+                      if (url) setArtworkUrl(url);
+                      else alert("No cover found");
+                    } finally {
+                      setFetchingCover(false);
+                    }
+                  }}
+                  disabled={fetchingCover}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.48)] hover:text-[rgba(255,255,255,0.8)] transition-colors disabled:opacity-50"
+                >
+                  {fetchingCover ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <ImageUp size={20} />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+                Notes
+              </label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={4}
+                className="px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] resize-none focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+              />
+            </div>
+          </div>
+
+          {/* Footer Buttons */}
+          <div className="flex items-center justify-end gap-4 mt-6">
+            <Button variant="glass" onClick={() => { reset(); onClose(); }}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              onSubmit({
+                ...(isEdit ? { id: initial.id } : {}),
+                title,
+                artist,
+                status,
+                tabs_link: tabsLink,
+                video_link: videoLink,
+                recording_link: recordingLink,
+                artwork_url: artworkUrl,
+                notes
+              });
+              reset();
+              onClose();
+            }}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

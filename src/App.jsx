@@ -11,9 +11,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { LessonStack } from "@/components/LessonStack";
 import { AddLessonModal } from "@/components/AddLessonModal";
-import { CopyPlus, RefreshCw, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2 } from 'lucide-react';
+import { CopyPlus, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2, LogOut } from 'lucide-react';
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
+import { useAuth } from "@/context/AuthContext";
+import { LoginPage } from "@/components/LoginPage";
+import * as supabaseApi from "@/lib/supabaseApi";
+import * as sharingApi from "@/lib/sharingApi";
+import { TeacherPanel, StudentLinkPanel } from "@/components/SharingPanels";
 
 // ---------------------------
 // Helpers
@@ -409,12 +414,15 @@ function SongsTab({ items, loading, onEdit }) {
 // ---------------------------
 // SETTINGS
 // ---------------------------
-function SettingsModal({ open, onClose, settings, setSettings }) {
+function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewingStudentId, onStudentSelect }) {
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl || "");
   const [token, setToken] = useState(settings.token || "");
   const [testResult, setTestResult] = useState("");
   const [testing, setTesting] = useState(false);
+  const [activeTab, setActiveTab] = useState("sharing");
+
   useEffect(() => { setBaseUrl(settings.baseUrl || ""); setToken(settings.token || ""); }, [settings]);
+
   async function testConnection() {
     setTesting(true); setTestResult("");
     try {
@@ -422,19 +430,125 @@ function SettingsModal({ open, onClose, settings, setSettings }) {
       setTestResult(`✅ Connected. Songs: ${Array.isArray(data?.songs) ? data.songs.length : 0}`);
     } catch (e) { setTestResult(`❌ ${e.message}`); } finally { setTesting(false); }
   }
+
+  if (!open) return null;
+
+  // Shared label/input classes matching AddSongModal
+  const labelClass = "text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase";
+  const inputClass = "px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)] w-full";
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-xl bg-card text-card-foreground border-border">
-        <DialogHeader><DialogTitle>Settings</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1"><span className="text-sm text-muted-foreground">Apps Script Web App URL</span><Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className="bg-input/10 border-input" /></div>
-          <div className="grid gap-1"><span className="text-sm text-muted-foreground">API token</span><Input value={token} onChange={e => setToken(e.target.value)} className="bg-input/10 border-input" /></div>
-          <Button variant="outline" onClick={testConnection} disabled={testing}>{testing ? 'Testing...' : 'Test connection'}</Button>
-          {testResult && <div className="text-sm">{testResult}</div>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop with blur */}
+      <div
+        className="absolute inset-0 bg-[rgba(0,0,0,0.8)] backdrop-blur-md"
+        onClick={onClose}
+      />
+
+      {/* Modal Card */}
+      <div
+        className="relative z-10 w-full max-w-[720px] mx-4 rounded-[24px] overflow-hidden flex flex-col"
+        style={{
+          background: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%)',
+          border: '1px solid transparent',
+          backgroundImage: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%), linear-gradient(267.73deg, #3F3069 1.5%, #2E6449 99.17%)',
+          backgroundOrigin: 'border-box',
+          backgroundClip: 'padding-box, border-box',
+        }}
+      >
+        {/* Card Header */}
+        <div className="flex items-center px-[24px] py-[12px] border-b border-[#2c2a30]">
+          <span className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
+            Settings
+          </span>
         </div>
-        <DialogFooter><Button onClick={() => { setSettings({ baseUrl, token }); onClose(); }}>Save</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+        {/* Card Content */}
+        <div className="p-[36px] flex-1 flex flex-col">
+          {/* Tabs */}
+          <div className="mb-6">
+            <CategoryTabs
+              categories={[
+                { value: "sharing", label: "Sharing" },
+                { value: "backend", label: "Backend" }
+              ]}
+              activeCategory={activeTab}
+              onCategoryChange={setActiveTab}
+            />
+          </div>
+
+          {/* Content */}
+          <div className="flex flex-col gap-6 flex-1">
+            {activeTab === "sharing" && (
+              <>
+                {isTeacher ? (
+                  <TeacherPanel
+                    onStudentSelect={(id) => { onStudentSelect(id); onClose(); }}
+                    selectedStudentId={viewingStudentId}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className={labelClass}>
+                      Connect to Teacher
+                    </div>
+                    <div className="text-[rgba(255,255,255,0.64)] text-[14px]">
+                      Enter your teacher's invite code to share your data with them.
+                    </div>
+                    <StudentLinkPanel />
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "backend" && (
+              <div className="flex flex-col gap-4">
+                <div className="text-[rgba(255,255,255,0.48)] text-[12px] italic">
+                  Legacy Google Sheets backend (fallback only)
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className={labelClass}>Apps Script Web App URL</label>
+                  <input
+                    value={baseUrl}
+                    onChange={e => setBaseUrl(e.target.value)}
+                    className={inputClass}
+                    placeholder="https://your-script-url..."
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className={labelClass}>API Token</label>
+                  <input
+                    value={token}
+                    onChange={e => setToken(e.target.value)}
+                    className={inputClass}
+                    placeholder="Your API token"
+                  />
+                </div>
+                <div className="flex gap-3 items-center">
+                  <button
+                    onClick={testConnection}
+                    disabled={testing}
+                    className="px-6 py-3 rounded-full border border-[rgba(255,255,255,0.12)] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.04)] transition-colors text-[14px] font-medium disabled:opacity-50"
+                  >
+                    {testing ? 'Testing...' : 'Test Connection'}
+                  </button>
+                  {testResult && <span className="text-[14px]">{testResult}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Buttons */}
+          <div className="flex items-center justify-end gap-4 mt-6">
+            <Button variant="glass" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={() => { setSettings({ baseUrl, token }); onClose(); }}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -442,12 +556,13 @@ function SettingsModal({ open, onClose, settings, setSettings }) {
 // APP
 // ---------------------------
 export default function App() {
+  const { user, loading: authLoading, signOut, isTeacher } = useAuth();
   const [tab, setTab] = useState("lessons");
   const [settings, setSettings] = useSettings();
   const [showSettings, setShowSettings] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
 
-  // Cache
+  // Cache - all hooks must be called unconditionally (before any early returns)
   const CACHE_KEY = 'lespal_cache_v1';
   const initialCache = useMemo(() => ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 }), []);
   const [songs, setSongs] = useState(initialCache.songs || []);
@@ -459,53 +574,72 @@ export default function App() {
   const [openAddSong, setOpenAddSong] = useState(false);
   const [editingSong, setEditingSong] = useState(null);
 
-  function saveCache(next) { ls.set(CACHE_KEY, next); }
+  // Teacher mode: viewing a specific student's data
+  const [viewingStudentId, setViewingStudentId] = useState(null);
+
   const STALE_MS = 2 * 60 * 1000;
 
+  // Load songs - Supabase first, fallback to Google Sheets
   const loadSongs = async (force = false) => {
-    if (!settings.baseUrl) return;
     const now = Date.now();
     const cache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-    if (!force && (now - (cache.tsSongs || 0) <= STALE_MS) && songs.length > 0) return;
+    // Skip cache check when viewing student data
+    if (!viewingStudentId && !force && (now - (cache.tsSongs || 0) <= STALE_MS) && songs.length > 0) return;
     setLoadingSongs(true);
     try {
-      const { songs: s } = await apiRequest(settings, 'listSongs', {});
+      // If viewing a student's data, use student-specific API
+      const s = viewingStudentId
+        ? await sharingApi.listStudentSongs(viewingStudentId)
+        : await supabaseApi.listSongs();
       s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       setSongs(s);
-      saveCache({ ...cache, songs: s, tsSongs: now });
-    } catch (e) { console.warn(e); } finally { setLoadingSongs(false); }
+      // Only cache own data, not student data
+      if (!viewingStudentId) {
+        ls.set(CACHE_KEY, { ...cache, songs: s, tsSongs: now });
+      }
+    } catch (supabaseError) {
+      console.warn('Supabase failed, trying fallback:', supabaseError);
+      // Fallback to Google Sheets if configured
+      if (settings.baseUrl) {
+        try {
+          const { songs: s } = await apiRequest(settings, 'listSongs', {});
+          s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+          setSongs(s);
+          ls.set(CACHE_KEY, { ...cache, songs: s, tsSongs: now });
+        } catch (e) { console.warn('Fallback also failed:', e); }
+      }
+    } finally { setLoadingSongs(false); }
   };
 
+  // Load lessons - Supabase first, fallback to Google Sheets
   const loadLessons = async (force = false) => {
-    if (!settings.baseUrl) return;
     const now = Date.now();
     const cache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-    if (!force && (now - (cache.tsLessons || 0) <= STALE_MS) && lessons.length > 0) return;
+    // Skip cache check when viewing student data
+    if (!viewingStudentId && !force && (now - (cache.tsLessons || 0) <= STALE_MS) && lessons.length > 0) return;
     setLoadingLessons(true);
     try {
-      const { lessons: l } = await apiRequest(settings, 'listLessons', {});
-      l.sort((a, b) => (b.date || '').localeCompare(a.date || '')); // Newest first
+      // If viewing a student's data, use student-specific API
+      const l = viewingStudentId
+        ? await sharingApi.listStudentLessons(viewingStudentId)
+        : await supabaseApi.listLessons();
       setLessons(l);
-      saveCache({ ...cache, lessons: l, tsLessons: now });
-    } catch (e) { console.warn(e); } finally { setLoadingLessons(false); }
-  };
-
-  useEffect(() => { loadSongs(true); loadLessons(true); }, [settings.baseUrl, settings.token]);
-
-  const handleUpsertSong = async (payload) => {
-    try {
-      if (payload?.id) await apiRequest(settings, 'updateSong', payload);
-      else await apiRequest(settings, 'createSong', payload);
-      await loadSongs(true);
-    } catch (e) { alert(e.message); }
-  };
-
-  const handleUpsertLesson = async (payload) => {
-    try {
-      if (payload?.id) await apiRequest(settings, 'updateLesson', payload);
-      else await apiRequest(settings, 'createLesson', payload);
-      await loadLessons(true);
-    } catch (e) { alert(e.message); }
+      // Only cache own data, not student data
+      if (!viewingStudentId) {
+        ls.set(CACHE_KEY, { ...cache, lessons: l, tsLessons: now });
+      }
+    } catch (supabaseError) {
+      console.warn('Supabase failed, trying fallback:', supabaseError);
+      // Fallback to Google Sheets if configured
+      if (settings.baseUrl && !viewingStudentId) {
+        try {
+          const { lessons: l } = await apiRequest(settings, 'listLessons', {});
+          l.sort((a, b) => (b.date || '').localeCompare(a.date || '')); // Newest first
+          setLessons(l);
+          ls.set(CACHE_KEY, { ...cache, lessons: l, tsLessons: now });
+        } catch (e) { console.warn('Fallback also failed:', e); }
+      }
+    } finally { setLoadingLessons(false); }
   };
 
   // Enriched Lessons (mapping song IDs to objects)
@@ -517,6 +651,50 @@ export default function App() {
       return { ...l, songs: lessonSongs };
     });
   }, [lessons, songs]);
+
+  // Load data when user or viewing student changes
+  useEffect(() => {
+    if (user) {
+      loadSongs(true);
+      loadLessons(true);
+    }
+  }, [user, viewingStudentId]);
+
+  // Show loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#161616] flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-white" />
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  const handleUpsertSong = async (payload) => {
+    try {
+      if (payload?.id) {
+        await supabaseApi.updateSong(payload.id, payload);
+      } else {
+        await supabaseApi.createSong(payload);
+      }
+      await loadSongs(true);
+    } catch (e) { alert(e.message); }
+  };
+
+  const handleUpsertLesson = async (payload) => {
+    try {
+      if (payload?.id) {
+        await supabaseApi.updateLesson(payload.id, payload);
+      } else {
+        await supabaseApi.createLesson(payload);
+      }
+      await loadLessons(true);
+    } catch (e) { alert(e.message); }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground bg-[#161616] overflow-hidden relative font-sans">
@@ -571,16 +749,6 @@ export default function App() {
               <CopyPlus size={20} strokeWidth={2} />
             </Button>
 
-            {/* Secondary "Lessons" (Refresh) */}
-            <Button
-              variant="glass"
-              size="icon"
-              onClick={() => (tab === 'lessons' ? loadLessons(true) : loadSongs(true))}
-              className="w-[44px] h-[44px] hover:text-white"
-            >
-              <RefreshCw size={20} strokeWidth={1.5} />
-            </Button>
-
             {/* Secondary "Settings" */}
             <Button
               variant="glass"
@@ -589,6 +757,17 @@ export default function App() {
               className="w-[44px] h-[44px] hover:text-white"
             >
               <Settings size={20} strokeWidth={1.5} />
+            </Button>
+
+            {/* Logout */}
+            <Button
+              variant="glass"
+              size="icon"
+              onClick={signOut}
+              className="w-[44px] h-[44px] hover:text-white"
+              title="Sign out"
+            >
+              <LogOut size={20} strokeWidth={1.5} />
             </Button>
           </div>
 
@@ -647,7 +826,15 @@ export default function App() {
         onSubmit={handleUpsertSong}
         initial={editingSong}
       />
-      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} settings={settings} setSettings={setSettings} />
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={settings}
+        setSettings={setSettings}
+        isTeacher={isTeacher}
+        viewingStudentId={viewingStudentId}
+        onStudentSelect={setViewingStudentId}
+      />
     </div>
   );
 }

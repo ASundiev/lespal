@@ -60,7 +60,13 @@ export function AuthProvider({ children }) {
     };
 
     const signUp = async (email, password) => {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: {
+                redirectTo: window.location.origin
+            }
+        });
         if (error) throw error;
         return data;
     };

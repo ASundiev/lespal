@@ -13,26 +13,40 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 0a. Isolated Secrets table for sensitive API keys
+CREATE TABLE IF NOT EXISTS user_secrets (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  gemini_api_key TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_secrets ENABLE ROW LEVEL SECURITY;
 
--- Users can read their own profile
-CREATE POLICY "Users can view own profile" ON user_profiles
-  FOR SELECT USING (auth.uid() = id);
+-- user_profiles Policies
+CREATE POLICY "Users can view own profile" ON user_profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Teachers can view student profiles" ON user_profiles FOR SELECT USING (EXISTS (SELECT 1 FROM teacher_students WHERE teacher_id = auth.uid() AND student_id = user_profiles.id));
 
--- Users can update their own profile
-CREATE POLICY "Users can update own profile" ON user_profiles
-  FOR UPDATE USING (auth.uid() = id);
+-- user_secrets Policies
+CREATE POLICY "Users can manage own secrets" ON user_secrets FOR ALL USING (auth.uid() = id);
 
--- Users can insert their own profile (during signup)
-CREATE POLICY "Users can insert own profile" ON user_profiles
-  FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Teachers can view their students' profiles
-CREATE POLICY "Teachers can view student profiles" ON user_profiles
+-- Teachers can view their students' secrets (to run AI on student data)
+CREATE POLICY "Teachers can view student secrets" ON user_secrets
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM teacher_students 
-      WHERE teacher_id = auth.uid() AND student_id = user_profiles.id
+      WHERE teacher_id = auth.uid() AND student_id = user_secrets.id
+    )
+  );
+
+-- Students can view their teacher's secrets (to use teacher's API key)
+CREATE POLICY "Students can view teacher secrets" ON user_secrets
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM teacher_students 
+      WHERE student_id = auth.uid() AND teacher_id = user_secrets.id
     )
   );
 

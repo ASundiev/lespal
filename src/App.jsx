@@ -54,51 +54,11 @@ const SETTINGS_KEY = "lespal_settings_v1";
 const NUDGE_DISMISS_KEY = "lespal_nudge_dismissed_until";
 
 function useSettings() {
-  const [settings, setSettings] = useState(() => ls.get(SETTINGS_KEY, { baseUrl: "", token: "", geminiApiKey: "" }));
+  const [settings, setSettings] = useState(() => ls.get(SETTINGS_KEY, { geminiApiKey: "" }));
   useEffect(() => { ls.set(SETTINGS_KEY, settings); }, [settings]);
   return [settings, setSettings];
 }
 
-// ---------------------------
-// API client
-// ---------------------------
-async function apiRequest({ baseUrl, token }, action, payload) {
-  if (!baseUrl) throw new Error('Please set the Apps Script Web App URL in Settings.');
-  const ACTIONS = {
-    listSongs: { path: 'songs', method: 'GET' },
-    listLessons: { path: 'lessons', method: 'GET' },
-    createSong: { path: 'songs', method: 'POST' },
-    updateSong: { path: 'songs', method: 'POST' },
-    createLesson: { path: 'lessons', method: 'POST' },
-    updateLesson: { path: 'lessons', method: 'POST' },
-  };
-  const cfg = ACTIONS[action] || { path: '', method: 'GET' };
-  const root = baseUrl.replace(/\/$/, '');
-  let url;
-  try {
-    url = new URL(`${root}/${cfg.path}`);
-  } catch (e) {
-    throw new Error(`Invalid Base URL: "${baseUrl}". Please check your settings.`);
-  }
-  if (action) url.searchParams.set('action', action);
-  if (token) url.searchParams.set('token', token);
-
-  const init = { method: cfg.method, headers: {} };
-  if (cfg.method === 'POST') {
-    init.headers['Content-Type'] = 'application/json';
-    init.body = JSON.stringify({ payload: payload || {} });
-  }
-
-  const res = await fetch(url.toString(), init);
-  if (!res.ok) {
-    let extra = '';
-    try { extra = ` — ${await res.text()}`; } catch { }
-    throw new Error(`HTTP ${res.status}${extra.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  if (data && data.error) throw new Error(data.error);
-  return data;
-}
 
 // ---------------------------
 // SONGS LOGIC (Inline for now)
@@ -463,26 +423,12 @@ function SongsTab({ items, loading, onEdit, neglectedSongs = [], nudgeVisible = 
 // SETTINGS
 // ---------------------------
 function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewingStudentId, onStudentSelect }) {
-  const [baseUrl, setBaseUrl] = useState(settings.baseUrl || "");
-  const [token, setToken] = useState(settings.token || "");
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
-  const [testResult, setTestResult] = useState("");
-  const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState("sharing");
 
   useEffect(() => {
-    setBaseUrl(settings.baseUrl || "");
-    setToken(settings.token || "");
     setGeminiApiKey(settings.geminiApiKey || "");
   }, [settings]);
-
-  async function testConnection() {
-    setTesting(true); setTestResult("");
-    try {
-      const data = await apiRequest({ baseUrl, token }, "listSongs", {});
-      setTestResult(`✅ Connected. Songs: ${Array.isArray(data?.songs) ? data.songs.length : 0}`);
-    } catch (e) { setTestResult(`❌ ${e.message}`); } finally { setTesting(false); }
-  }
 
   if (!open) return null;
 
@@ -523,7 +469,6 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
             <CategoryTabs
               categories={[
                 { value: "sharing", label: "Sharing" },
-                { value: "backend", label: "Backend" },
                 { value: "ai", label: "AI" }
               ]}
               activeCategory={activeTab}
@@ -554,41 +499,6 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
               </>
             )}
 
-            {activeTab === "backend" && (
-              <div className="flex flex-col gap-4">
-                <div className="text-[rgba(255,255,255,0.48)] text-[12px] italic">
-                  Legacy Google Sheets backend (fallback only)
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className={labelClass}>Apps Script Web App URL</label>
-                  <input
-                    value={baseUrl}
-                    onChange={e => setBaseUrl(e.target.value)}
-                    className={inputClass}
-                    placeholder="https://your-script-url..."
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className={labelClass}>API Token</label>
-                  <input
-                    value={token}
-                    onChange={e => setToken(e.target.value)}
-                    className={inputClass}
-                    placeholder="Your API token"
-                  />
-                </div>
-                <div className="flex gap-3 items-center">
-                  <button
-                    onClick={testConnection}
-                    disabled={testing}
-                    className="px-6 py-3 rounded-full border border-[rgba(255,255,255,0.12)] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.04)] transition-colors text-[14px] font-medium disabled:opacity-50"
-                  >
-                    {testing ? 'Testing...' : 'Test Connection'}
-                  </button>
-                  {testResult && <span className="text-[14px]">{testResult}</span>}
-                </div>
-              </div>
-            )}
 
             {activeTab === "ai" && (
               <div className="flex flex-col gap-4">
@@ -615,7 +525,7 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
             <Button variant="glass" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={() => { setSettings({ ...settings, baseUrl, token, geminiApiKey }); onClose(); }}>
+            <Button onClick={() => { setSettings({ ...settings, geminiApiKey }); onClose(); }}>
               Save
             </Button>
           </div>
@@ -770,16 +680,7 @@ export default function App() {
         ls.set(CACHE_KEY, { ...cache, songs: s, tsSongs: now });
       }
     } catch (supabaseError) {
-      console.warn('Supabase failed, trying fallback:', supabaseError);
-      // Fallback to Google Sheets if configured
-      if (settings.baseUrl) {
-        try {
-          const { songs: s } = await apiRequest(settings, 'listSongs', {});
-          s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-          setSongs(s);
-          ls.set(CACHE_KEY, { ...cache, songs: s, tsSongs: now });
-        } catch (e) { console.warn('Fallback also failed:', e); }
-      }
+      console.warn('Supabase failed:', supabaseError);
     } finally { setLoadingSongs(false); }
   };
 
@@ -801,16 +702,7 @@ export default function App() {
         ls.set(CACHE_KEY, { ...cache, lessons: l, tsLessons: now });
       }
     } catch (supabaseError) {
-      console.warn('Supabase failed, trying fallback:', supabaseError);
-      // Fallback to Google Sheets if configured
-      if (settings.baseUrl && !viewingStudentId) {
-        try {
-          const { lessons: l } = await apiRequest(settings, 'listLessons', {});
-          l.sort((a, b) => (b.date || '').localeCompare(a.date || '')); // Newest first
-          setLessons(l);
-          ls.set(CACHE_KEY, { ...cache, lessons: l, tsLessons: now });
-        } catch (e) { console.warn('Fallback also failed:', e); }
-      }
+      console.warn('Supabase failed:', supabaseError);
     } finally { setLoadingLessons(false); }
   };
 

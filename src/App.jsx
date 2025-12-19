@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 // — shadcn/ui components —
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { LessonStack } from "@/components/LessonStack";
 import { AddLessonModal } from "@/components/AddLessonModal";
-import { CopyPlus, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2, LogOut } from 'lucide-react';
+import { CopyPlus, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2, LogOut, X, Sparkles } from 'lucide-react';
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
 import { useAuth } from "@/context/AuthContext";
@@ -19,6 +20,7 @@ import { LoginPage } from "@/components/LoginPage";
 import * as supabaseApi from "@/lib/supabaseApi";
 import * as sharingApi from "@/lib/sharingApi";
 import { TeacherPanel, StudentLinkPanel } from "@/components/SharingPanels";
+import { InsightsTab } from "@/components/InsightsTab";
 
 // ---------------------------
 // Helpers
@@ -49,9 +51,10 @@ const ls = {
 };
 
 const SETTINGS_KEY = "lespal_settings_v1";
+const NUDGE_DISMISS_KEY = "lespal_nudge_dismissed_until";
 
 function useSettings() {
-  const [settings, setSettings] = useState(() => ls.get(SETTINGS_KEY, { baseUrl: "", token: "" }));
+  const [settings, setSettings] = useState(() => ls.get(SETTINGS_KEY, { baseUrl: "", token: "", geminiApiKey: "" }));
   useEffect(() => { ls.set(SETTINGS_KEY, settings); }, [settings]);
   return [settings, setSettings];
 }
@@ -100,7 +103,7 @@ async function apiRequest({ baseUrl, token }, action, payload) {
 // ---------------------------
 // SONGS LOGIC (Inline for now)
 // ---------------------------
-const SONG_STATUSES = ["rehearsing", "want", "studied", "recorded"];
+const SONG_STATUSES = ["rehearsing", "want", "studied"];
 
 async function findArtworkUrl(artist, title) {
   if (!artist && !title) return "";
@@ -329,15 +332,9 @@ function AddSongModal({ open, onClose, onSubmit, initial }) {
   );
 }
 
-function SongsTab({ items, loading, onEdit }) {
+function SongsTab({ items, loading, onEdit, neglectedSongs = [], nudgeVisible = false, onDismissNudge }) {
   const [q, setQ] = useState("");
   const [activeCategory, setActiveCategory] = useState("rehearsing");
-
-  const CATEGORIES = [
-    { value: "rehearsing", label: "Rehearsing" },
-    { value: "want", label: "Want" },
-    { value: "studied", label: "Studied" },
-  ];
 
   // Aggregate songs by title+artist to dedupe
   const aggregated = useMemo(() => {
@@ -347,7 +344,10 @@ function SongsTab({ items, loading, onEdit }) {
       const key = `${norm(s.title)}||${norm(s.artist)}`;
       if (!map.has(key)) map.set(key, { _key: key, id: s.id || key, title: s.title || "", artist: s.artist || "", statuses: new Set(), artwork_url: s.artwork_url || "", tabs_link: s.tabs_link || "", video_link: s.video_link || "", recording_link: s.recording_link || "", notes: s.notes || "" });
       const g = map.get(key);
-      if (s.status) g.statuses.add(String(s.status));
+      if (s.status) {
+        const normalizedStatus = String(s.status) === 'recorded' ? 'studied' : String(s.status);
+        g.statuses.add(normalizedStatus);
+      }
       if (!g.artwork_url && s.artwork_url) g.artwork_url = s.artwork_url;
       if (!g.tabs_link && s.tabs_link) g.tabs_link = s.tabs_link;
       if (!g.video_link && s.video_link) g.video_link = s.video_link;
@@ -356,6 +356,21 @@ function SongsTab({ items, loading, onEdit }) {
     }
     return Array.from(map.values()).map(g => ({ ...g, statuses: Array.from(g.statuses) }));
   }, [items]);
+
+  const CATEGORIES = useMemo(() => {
+    const counts = aggregated.reduce((acc, s) => {
+      s.statuses.forEach(st => {
+        acc[st] = (acc[st] || 0) + 1;
+      });
+      return acc;
+    }, {});
+
+    return [
+      { value: "rehearsing", label: "Rehearsing", count: counts.rehearsing || 0 },
+      { value: "want", label: "Want", count: counts.want || 0 },
+      { value: "studied", label: "Studied", count: counts.studied || 0 },
+    ];
+  }, [aggregated]);
 
   // Filter by search and category
   const visible = useMemo(() => {
@@ -390,6 +405,39 @@ function SongsTab({ items, loading, onEdit }) {
         </div>
       </div>
 
+      {/* Maintenance Nudge */}
+      {nudgeVisible && neglectedSongs.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative group overflow-hidden rounded-[16px] p-[1px]"
+          style={{
+            background: 'linear-gradient(104.59deg, rgba(16, 185, 129, 0.12) 0.76%, rgba(16, 185, 129, 0.03) 99%)',
+          }}
+        >
+          <div className="absolute inset-0 bg-[#161616] rounded-[16px]" />
+          <div className="relative flex items-center justify-between px-6 py-4 rounded-[16px] bg-[rgba(16,185,129,0.04)] border border-[rgba(16,185,129,0.1)]">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Sparkles size={20} className="text-emerald-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-emerald-400 text-sm font-bold uppercase tracking-wider font-['Inter_Tight']">Refresh Needed</span>
+                <p className="text-sm text-[rgba(255,255,255,0.64)]">
+                  It's been a while since you played <span className="text-white font-medium">{neglectedSongs.map(s => s.title).join(', ')}</span>. Avoid forgetting them!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onDismissNudge}
+              className="p-2 rounded-full hover:bg-white/5 text-[rgba(255,255,255,0.32)] hover:text-white transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Loading State */}
       {loading && <div className="text-sm text-[rgba(255,255,255,0.48)]">Loading...</div>}
 
@@ -417,11 +465,16 @@ function SongsTab({ items, loading, onEdit }) {
 function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewingStudentId, onStudentSelect }) {
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl || "");
   const [token, setToken] = useState(settings.token || "");
+  const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
   const [testResult, setTestResult] = useState("");
   const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState("sharing");
 
-  useEffect(() => { setBaseUrl(settings.baseUrl || ""); setToken(settings.token || ""); }, [settings]);
+  useEffect(() => {
+    setBaseUrl(settings.baseUrl || "");
+    setToken(settings.token || "");
+    setGeminiApiKey(settings.geminiApiKey || "");
+  }, [settings]);
 
   async function testConnection() {
     setTesting(true); setTestResult("");
@@ -470,7 +523,8 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
             <CategoryTabs
               categories={[
                 { value: "sharing", label: "Sharing" },
-                { value: "backend", label: "Backend" }
+                { value: "backend", label: "Backend" },
+                { value: "ai", label: "AI" }
               ]}
               activeCategory={activeTab}
               onCategoryChange={setActiveTab}
@@ -535,6 +589,25 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
                 </div>
               </div>
             )}
+
+            {activeTab === "ai" && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className={labelClass}>Gemini API Key</label>
+                  <input
+                    value={geminiApiKey}
+                    onChange={e => setGeminiApiKey(e.target.value)}
+                    className={inputClass}
+                    type="password"
+                    placeholder="Enter your Gemini API key"
+                  />
+                  <p className="text-[11px] text-[rgba(255,255,255,0.32)]">
+                    Used for semantic analysis of your lesson notes. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline hover:text-white transition-colors">Google AI Studio</a>.
+                    <br />(Always replace the entire key if you're updating it).
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer Buttons */}
@@ -542,7 +615,7 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
             <Button variant="glass" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={() => { setSettings({ baseUrl, token }); onClose(); }}>
+            <Button onClick={() => { setSettings({ ...settings, baseUrl, token, geminiApiKey }); onClose(); }}>
               Save
             </Button>
           </div>
@@ -574,10 +647,109 @@ export default function App() {
   const [openAddSong, setOpenAddSong] = useState(false);
   const [editingSong, setEditingSong] = useState(null);
 
+  // Nudge Dismissal State
+  const [nudgeDismissedUntil, setNudgeDismissedUntil] = useState(() => {
+    try {
+      const v = localStorage.getItem(NUDGE_DISMISS_KEY);
+      return v ? parseInt(v, 10) : 0;
+    } catch { return 0; }
+  });
+
+  const handleDismissNudge = () => {
+    const until = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    setNudgeDismissedUntil(until);
+    localStorage.setItem(NUDGE_DISMISS_KEY, String(until));
+  };
+
+  const isNudgeVisible = useMemo(() => {
+    return Date.now() > nudgeDismissedUntil;
+  }, [nudgeDismissedUntil]);
+
+  // Calculate Neglected Songs (not in last 20 lessons)
+  const neglectedSongs = useMemo(() => {
+    if (loadingLessons || loadingSongs || lessons.length === 0) return [];
+
+    // 1. IDs of songs in last 20 lessons
+    const recentLessons = lessons.slice(0, 20);
+    const recentSongIds = new Set();
+    recentLessons.forEach(l => {
+      const ids = String(l.topics || "").split(",").filter(Boolean);
+      ids.forEach(id => recentSongIds.add(String(id)));
+    });
+
+    // 2. Filter songs by status and lack of recent practice
+    const candidates = songs.filter(s => {
+      const normalizedStatus = String(s.status) === 'recorded' ? 'studied' : String(s.status);
+      const isRepertoire = normalizedStatus === 'rehearsing';
+      return isRepertoire && !recentSongIds.has(String(s.id));
+    });
+
+    // 3. (Optional) Sort by last practiced date across ALL lessons
+    // For simplicity, we'll just take the top 3 from the current list (which is sorted by title)
+    return candidates.slice(0, 3);
+  }, [songs, lessons, loadingSongs, loadingLessons]);
+
   // Teacher mode: viewing a specific student's data
   const [viewingStudentId, setViewingStudentId] = useState(null);
+  const [effectiveGeminiApiKey, setEffectiveGeminiApiKey] = useState("");
 
   const STALE_MS = 2 * 60 * 1000;
+
+  // Resolve effective Gemini API key (Self -> Teacher -> Student)
+  useEffect(() => {
+    async function resolveApiKey() {
+      // 1. Try local settings first (most immediate)
+      if (settings.geminiApiKey) {
+        setEffectiveGeminiApiKey(settings.geminiApiKey);
+        return;
+      }
+
+      try {
+        // 2. Try Supabase Secrets for self
+        const mySecrets = await supabaseApi.getSecrets();
+        if (mySecrets?.gemini_api_key) {
+          setEffectiveGeminiApiKey(mySecrets.gemini_api_key);
+          // Sync to local settings if missing
+          if (!settings.geminiApiKey) setSettings(s => ({ ...s, geminiApiKey: mySecrets.gemini_api_key }));
+          return;
+        }
+
+        // 3. If student, try teacher's secrets
+        if (!isTeacher) {
+          const teacherId = await supabaseApi.getTeacherOfStudent(user.id);
+          if (teacherId) {
+            const teacherSecrets = await supabaseApi.getSecrets(teacherId);
+            if (teacherSecrets?.gemini_api_key) {
+              setEffectiveGeminiApiKey(teacherSecrets.gemini_api_key);
+              return;
+            }
+          }
+        }
+
+        // 4. If teacher viewing student, try student's secrets
+        if (isTeacher && viewingStudentId) {
+          const studentSecrets = await supabaseApi.getSecrets(viewingStudentId);
+          if (studentSecrets?.gemini_api_key) {
+            setEffectiveGeminiApiKey(studentSecrets.gemini_api_key);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to resolve shared API key:', e);
+      }
+
+      setEffectiveGeminiApiKey("");
+    }
+
+    if (user) resolveApiKey();
+  }, [user, viewingStudentId, settings.geminiApiKey, isTeacher]);
+
+  // Sync API Key to Supabase when updated in settings
+  useEffect(() => {
+    if (user && settings.geminiApiKey) {
+      supabaseApi.updateSecrets({ gemini_api_key: settings.geminiApiKey }).catch(console.error);
+    }
+  }, [settings.geminiApiKey, user]);
 
   // Load songs - Supabase first, fallback to Google Sheets
   const loadSongs = async (force = false) => {
@@ -731,6 +903,7 @@ export default function App() {
               <div className="flex gap-[20px] px-[24px] py-[12px] rounded-full bg-transparent relative z-10">
                 <button onClick={() => setTab('lessons')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Lessons</button>
                 <button onClick={() => setTab('songs')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Songs</button>
+                <button onClick={() => setTab('insights')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Insights</button>
               </div>
             </div>
           )}
@@ -788,6 +961,7 @@ export default function App() {
               <div className="flex items-center justify-between px-[48px] py-[16px] rounded-full bg-transparent relative z-10">
                 <button onClick={() => setTab('lessons')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Lessons</button>
                 <button onClick={() => setTab('songs')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Songs</button>
+                <button onClick={() => setTab('insights')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Insights</button>
               </div>
             </div>
           )}
@@ -807,7 +981,14 @@ export default function App() {
             items={songs}
             loading={loadingSongs}
             onEdit={(s) => { setEditingSong(s); setOpenAddSong(true); }}
+            neglectedSongs={neglectedSongs}
+            nudgeVisible={isNudgeVisible}
+            onDismissNudge={handleDismissNudge}
           />
+        )}
+
+        {tab === 'insights' && (
+          <InsightsTab songs={songs} lessons={enrichedLessons} geminiApiKey={effectiveGeminiApiKey} />
         )}
       </div>
 

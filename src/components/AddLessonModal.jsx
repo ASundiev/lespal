@@ -84,7 +84,7 @@ function SongsSelector({ songs, selectedIds, onToggle, isOpen, setIsOpen }) {
     );
 }
 
-export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLesson }) {
+export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initial, lastLesson }) {
     const isEdit = !!initial;
     const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
     const [notes, setNotes] = useState("");
@@ -93,6 +93,16 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
     const [songsDropdownOpen, setSongsDropdownOpen] = useState(false);
     const [isEditingCounter, setIsEditingCounter] = useState(false);
     const counterInputRef = useRef(null);
+    const DRAFT_KEY_NEW = "lespal_lesson_draft_new";
+    const getDraftKey = (lessonId) => lessonId ? `lespal_lesson_draft_${lessonId}` : DRAFT_KEY_NEW;
+
+    // Save to localStorage whenever notes or songs change (for both new and editing)
+    useEffect(() => {
+        if (open && (notes || selectedSongIds.length > 0)) {
+            const key = getDraftKey(initial?.id);
+            localStorage.setItem(key, JSON.stringify({ notes, selectedSongIds }));
+        }
+    }, [notes, selectedSongIds, open, initial]);
 
     useEffect(() => {
         if (isEditingCounter && counterInputRef.current) {
@@ -106,17 +116,36 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
         (lastLesson?.remaining_lessons ? Math.max(0, parseInt(lastLesson.remaining_lessons) - 1) : 0)
     );
 
+    // Initialize form state when modal opens - handles both editing and new lesson with draft recovery
     useEffect(() => {
         if (open) {
+            const draftKey = getDraftKey(initial?.id);
+            let draftNotes = "";
+            let draftSongIds = [];
+
+            // Try to load draft from localStorage
+            try {
+                const saved = localStorage.getItem(draftKey);
+                if (saved) {
+                    const draft = JSON.parse(saved);
+                    draftNotes = draft.notes || "";
+                    draftSongIds = draft.selectedSongIds || [];
+                }
+            } catch (e) {
+                console.warn("Failed to load draft:", e);
+            }
+
             if (initial) {
+                // Editing an existing lesson: use draft if available, otherwise use initial data
                 setDate(initial.date ? new Date(initial.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-                setNotes(initial.notes || "");
-                setSelectedSongIds(initial.topics ? String(initial.topics).split(',').filter(Boolean) : []);
+                setNotes(draftNotes || initial.notes || "");
+                setSelectedSongIds(draftSongIds.length > 0 ? draftSongIds : (initial.topics ? String(initial.topics).split(',').filter(Boolean) : []));
                 setCalculatedRemaining(initial.remaining_lessons);
             } else {
+                // New lesson: use draft if available
                 setDate(new Date().toISOString().slice(0, 10));
-                setNotes("");
-                setSelectedSongIds([]);
+                setNotes(draftNotes);
+                setSelectedSongIds(draftSongIds);
                 setCalculatedRemaining(
                     lastLesson?.remaining_lessons ? Math.max(0, parseInt(lastLesson.remaining_lessons) - 1) : 0
                 );
@@ -126,6 +155,7 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
     }, [open, initial, lastLesson]);
 
     const handleSubmit = () => {
+        const draftKey = getDraftKey(initial?.id);
         onSubmit({
             ...(isEdit ? { id: initial.id } : {}),
             date,
@@ -134,6 +164,7 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
             remaining_lessons: calculatedRemaining
         });
         onClose();
+        localStorage.removeItem(draftKey);
     };
 
     // Format date for display matching lesson card: "10 Dec 2025" uppercase
@@ -155,9 +186,10 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
                 style={{
                     background: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%)',
                     border: '1px solid transparent',
-                    backgroundImage: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%), linear-gradient(267.73deg, #3F3069 1.5%, #2E6449 99.17%)',
+                    backgroundImage: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%), linear-gradient(267.73deg, #2C2A30 1.5%, #2E3437 99.17%)',
                     backgroundOrigin: 'border-box',
                     backgroundClip: 'padding-box, border-box',
+                    boxShadow: '0px 2px 0px 2px rgba(17, 19, 23, 0.64)'
                 }}
             >
                 {/* Card Header */}
@@ -250,13 +282,34 @@ export function AddLessonModal({ open, onClose, onSubmit, songs, initial, lastLe
                     </div>
 
                     {/* Footer Buttons */}
-                    <div className="flex items-center justify-end gap-4 mt-6">
-                        <Button variant="glass" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSubmit}>
-                            {isEdit ? 'Save Changes' : 'Save'}
-                        </Button>
+                    <div className="flex items-center justify-between gap-4 mt-6">
+                        {/* Delete Button - Left Aligned, only when editing */}
+                        {isEdit && onDelete ? (
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    if (window.confirm('Are you sure you want to delete this lesson?')) {
+                                        const draftKey = getDraftKey(initial?.id);
+                                        localStorage.removeItem(draftKey);
+                                        onDelete(initial.id);
+                                        onClose();
+                                    }
+                                }}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            >
+                                Delete
+                            </Button>
+                        ) : <div />}
+
+                        {/* Cancel/Save - Right Aligned */}
+                        <div className="flex items-center gap-4">
+                            <Button variant="glass" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleSubmit}>
+                                {isEdit ? 'Save Changes' : 'Save'}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

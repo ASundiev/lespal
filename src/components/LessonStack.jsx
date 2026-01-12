@@ -18,16 +18,24 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
         return <div className="text-center text-white/50 py-20">No lessons found. Add one!</div>;
     }
 
+    const [direction, setDirection] = useState(0); // 1 for Next (Older), -1 for Prev (Newer)
+
     // Ensure index is valid
     const safeIndex = Math.min(Math.max(0, index), lessons.length - 1);
 
     // Cycle logic: Next = older (Index + 1), Prev = newer (Index - 1)
     const handleNext = () => {
-        if (safeIndex < lessons.length - 1) setIndex(safeIndex + 1);
+        if (safeIndex < lessons.length - 1) {
+            setDirection(1);
+            setIndex(safeIndex + 1);
+        }
     };
 
     const handlePrev = () => {
-        if (safeIndex > 0) setIndex(safeIndex - 1);
+        if (safeIndex > 0) {
+            setDirection(-1);
+            setIndex(safeIndex - 1);
+        }
     };
 
     // Stacking Configuration
@@ -44,21 +52,27 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
         back1: { zIndex: 2, opacity: 1, scale: isMobile ? 0.9 : 1, y: isMobile ? -7 : 1, rotate: 2, boxShadow: 'none' },
         back2: { zIndex: 1, opacity: 1, scale: isMobile ? 0.9 : 1, y: isMobile ? -8 : 13, rotate: -2, boxShadow: 'none' },
         hidden: { zIndex: 0, opacity: 0, scale: isMobile ? 0.85 : 1, y: isMobile ? -10 : 30, rotate: 0 },
-        // Exit: Swipe out to RIGHT. Rotate slightly.
-        exit: { zIndex: 4, x: 500, opacity: 0, rotate: 5, transition: { duration: 0.2 } }
+        // Exit: Swipe out to RIGHT or LEFT based on direction.
+        exit: (dir) => ({
+            zIndex: 4,
+            x: dir === 1 ? -500 : 500, // dir 1 (Next/Older) -> Left swipe -> Exit Left
+            opacity: 0,
+            rotate: dir === 1 ? -5 : 5,
+            transition: { duration: 0.2 }
+        })
     };
 
     const onDragEnd = (e, { offset, velocity }) => {
-        const swipeConfidenceThreshold = 100; // Lower threshold slightly for better feel
+        const swipeConfidenceThreshold = 10000;
         const swipePower = Math.abs(offset.x) * velocity.x;
 
         // Determine direction
-        // Swipe Right (Positive x) -> Prev (Newer)
         // Swipe Left (Negative x) -> Next (Older)
+        // Swipe Right (Positive x) -> Prev (Newer)
 
-        if (offset.x < -100 || (offset.x < 0 && swipePower < -swipeConfidenceThreshold)) {
+        if (offset.x < -100 || swipePower < -swipeConfidenceThreshold) {
             handleNext();
-        } else if (offset.x > 100 || (offset.x > 0 && swipePower > swipeConfidenceThreshold)) {
+        } else if (offset.x > 100 || swipePower > swipeConfidenceThreshold) {
             handlePrev();
         }
     };
@@ -110,7 +124,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
 
             {/* Card Stack Container - Responsive width, height from content */}
             <div className={`relative ${isMobile ? "w-full h-[60vh] perspective-1000" : "flex-1 max-w-[1080px] min-w-[327px] min-h-[480px]"}`}>
-                <AnimatePresence initial={false} mode="popLayout">
+                <AnimatePresence initial={false} mode="popLayout" custom={direction}>
                     {/* Render stack. We map visible slice + 1buffer */}
                     {lessons.slice(safeIndex, safeIndex + VISIBLE_COUNT).map((lesson, i) => {
                         const isFront = i === 0;
@@ -120,6 +134,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                         return (
                             <motion.div
                                 key={lesson.id || `lesson-${safeIndex + i}`} // Use ID if possible
+                                custom={direction}
                                 className="absolute top-0 left-0 w-full"
                                 style={{
                                     transformOrigin: "center top",
@@ -132,7 +147,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
                                 drag={isMobile && isFront ? "x" : false}
                                 dragConstraints={{ left: -1000, right: 1000 }} // Allow full dragging
-                                dragElastic={0.05} // Looser feel
+                                dragElastic={0.1} // Better feel than 0.05
                                 onDragEnd={onDragEnd}
                                 whileTap={isMobile && isFront ? { cursor: "grabbing" } : {}}
                             >

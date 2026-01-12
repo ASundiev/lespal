@@ -760,6 +760,13 @@ export default function App() {
     } catch (e) { alert(e.message); }
   };
 
+  const handleDeleteLesson = async (id) => {
+    try {
+      await supabaseApi.deleteLesson(id);
+      await loadLessons(true);
+    } catch (e) { alert(e.message); }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground bg-[#161616] overflow-hidden relative font-sans">
       {/* Background Blurs */}
@@ -889,6 +896,7 @@ export default function App() {
         open={openLessonModal}
         onClose={() => setOpenLessonModal(false)}
         onSubmit={handleUpsertLesson}
+        onDelete={handleDeleteLesson}
         songs={songs}
         initial={editingLesson}
         lastLesson={lessons[0]} // Pass latest lesson for calculating remaining

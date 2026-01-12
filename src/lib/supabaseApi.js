@@ -80,6 +80,15 @@ export async function updateLesson(id, updates) {
     if (error) throw error;
     return data;
 }
+
+export async function deleteLesson(id) {
+    const { error } = await supabase
+        .from('lessons')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw error;
+}
 // ============ PROFILE & SETTINGS ============
 
 export async function getProfile(userId) {

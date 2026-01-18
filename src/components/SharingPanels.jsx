@@ -139,13 +139,39 @@ export function StudentLinkPanel() {
         }
     }
 
+    async function handleUnlink() {
+        if (!window.confirm('Are you sure you want to disconnect from your teacher? You will need a new invite code to reconnect.')) return;
+        setLoading(true);
+        try {
+            for (const t of teachers) {
+                await sharingApi.unlinkTeacher(t.teacher_id);
+            }
+            // Refresh teachers list
+            const updated = await sharingApi.getMyTeachers();
+            setTeachers(updated);
+        } catch (e) {
+            alert('Failed: ' + e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     if (teachers.length > 0) {
         return (
-            <div className="flex items-center gap-3 py-3">
-                <Check size={18} className="text-green-400" />
-                <span className="text-[rgba(255,255,255,0.64)] text-[14px]">
-                    Linked to teacher
-                </span>
+            <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                    <Check size={18} className="text-green-400" />
+                    <span className="text-[rgba(255,255,255,0.64)] text-[14px]">
+                        Linked to teacher
+                    </span>
+                </div>
+                <button
+                    onClick={handleUnlink}
+                    disabled={loading}
+                    className="text-red-400 hover:text-red-300 text-[12px] font-medium transition-colors"
+                >
+                    {loading ? 'Unlinking...' : 'Disconnect'}
+                </button>
             </div>
         );
     }

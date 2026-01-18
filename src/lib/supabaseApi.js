@@ -17,13 +17,13 @@ export async function listSongs() {
     return data || [];
 }
 
-export async function createSong(song) {
+export async function createSong(song, targetUserId = null) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await supabase
         .from('songs')
-        .insert({ ...song, user_id: user.id })
+        .insert({ ...song, user_id: targetUserId || user.id })
         .select()
         .single();
 
@@ -55,13 +55,13 @@ export async function listLessons() {
     return data || [];
 }
 
-export async function createLesson(lesson) {
+export async function createLesson(lesson, targetUserId = null) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await supabase
         .from('lessons')
-        .insert({ ...lesson, user_id: user.id })
+        .insert({ ...lesson, user_id: targetUserId || user.id })
         .select()
         .single();
 

@@ -424,7 +424,6 @@ function SongsTab({ items, loading, onEdit, neglectedSongs = [], nudgeVisible = 
 // ---------------------------
 function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewingStudentId, onStudentSelect }) {
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
-  const [activeTab, setActiveTab] = useState("sharing");
 
   useEffect(() => {
     setGeminiApiKey(settings.geminiApiKey || "");
@@ -463,61 +462,56 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
         </div>
 
         {/* Card Content */}
-        <div className="p-[36px] flex-1 flex flex-col">
-          {/* Tabs */}
-          <div className="mb-6">
-            <CategoryTabs
-              categories={[
-                { value: "sharing", label: "Sharing" },
-                { value: "ai", label: "AI" }
-              ]}
-              activeCategory={activeTab}
-              onCategoryChange={setActiveTab}
-            />
-          </div>
-
-          {/* Content */}
-          <div className="flex flex-col gap-6 flex-1">
-            {activeTab === "sharing" && (
-              <>
-                {isTeacher ? (
-                  <TeacherPanel
-                    onStudentSelect={(id) => { onStudentSelect(id); onClose(); }}
-                    selectedStudentId={viewingStudentId}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    <div className={labelClass}>
-                      Connect to Teacher
-                    </div>
-                    <div className="text-[rgba(255,255,255,0.64)] text-[14px]">
-                      Enter your teacher's invite code to share your data with them.
-                    </div>
-                    <StudentLinkPanel />
-                  </div>
-                )}
-              </>
-            )}
-
-
-            {activeTab === "ai" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className={labelClass}>Gemini API Key</label>
-                  <input
-                    value={geminiApiKey}
-                    onChange={e => setGeminiApiKey(e.target.value)}
-                    className={inputClass}
-                    type="password"
-                    placeholder="Enter your Gemini API key"
-                  />
-                  <p className="text-[11px] text-[rgba(255,255,255,0.32)]">
-                    Used for semantic analysis of your lesson notes. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline hover:text-white transition-colors">Google AI Studio</a>.
-                    <br />(Always replace the entire key if you're updating it).
-                  </p>
-                </div>
+        <div className="p-[36px] flex-1 flex flex-col max-h-[70vh] overflow-y-auto custom-scrollbar">
+          <div className="flex flex-col gap-10 flex-1">
+            {/* Sharing Section */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Share size={16} className="text-[rgba(255,255,255,0.48)]" />
+                <h3 className="text-[rgba(255,255,255,0.8)] font-semibold font-['Inter_Tight'] text-[14px] uppercase tracking-wider">Sharing</h3>
               </div>
-            )}
+              {isTeacher ? (
+                <TeacherPanel
+                  onStudentSelect={(id) => { onStudentSelect(id); onClose(); }}
+                  selectedStudentId={viewingStudentId}
+                />
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <div className={labelClass}>
+                    Connect to Teacher
+                  </div>
+                  <div className="text-[rgba(255,255,255,0.64)] text-[14px]">
+                    Enter your teacher's invite code to share your data with them.
+                  </div>
+                  <StudentLinkPanel />
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="h-[1px] bg-[rgba(255,255,255,0.08)] w-full" />
+
+            {/* AI Section */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={16} className="text-[rgba(255,255,255,0.48)]" />
+                <h3 className="text-[rgba(255,255,255,0.8)] font-semibold font-['Inter_Tight'] text-[14px] uppercase tracking-wider">AI Analysis</h3>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className={labelClass}>Gemini API Key</label>
+                <input
+                  value={geminiApiKey}
+                  onChange={e => setGeminiApiKey(e.target.value)}
+                  className={inputClass}
+                  type="password"
+                  placeholder="Enter your Gemini API key"
+                />
+                <p className="text-[11px] text-[rgba(255,255,255,0.32)]">
+                  Used for semantic analysis of your lesson notes. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline hover:text-white transition-colors">Google AI Studio</a>.
+                  <br />(Always replace the entire key if you're updating it).
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Footer Buttons */}
@@ -743,7 +737,7 @@ export default function App() {
       if (payload?.id) {
         await supabaseApi.updateSong(payload.id, payload);
       } else {
-        await supabaseApi.createSong(payload);
+        await supabaseApi.createSong(payload, viewingStudentId);
       }
       await loadSongs(true);
     } catch (e) { alert(e.message); }
@@ -754,7 +748,7 @@ export default function App() {
       if (payload?.id) {
         await supabaseApi.updateLesson(payload.id, payload);
       } else {
-        await supabaseApi.createLesson(payload);
+        await supabaseApi.createLesson(payload, viewingStudentId);
       }
       await loadLessons(true);
     } catch (e) { alert(e.message); }

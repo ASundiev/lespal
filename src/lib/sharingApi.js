@@ -14,9 +14,17 @@ export async function createInviteCode() {
     // Generate a simple 6-character code
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+    // Set expiration to 24 hours from now
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
     const { data, error } = await supabase
         .from('invite_codes')
-        .insert({ code, teacher_id: user.id })
+        .insert({
+            code,
+            teacher_id: user.id,
+            expires_at: expiresAt.toISOString()
+        })
         .select()
         .single();
 
@@ -26,9 +34,13 @@ export async function createInviteCode() {
 
 // Get teacher's active invite codes
 export async function getMyInviteCodes() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     const { data, error } = await supabase
         .from('invite_codes')
         .select('*')
+        .eq('teacher_id', user.id)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -46,7 +58,7 @@ export async function redeemInviteCode(code) {
         .select('*')
         .eq('code', code.toUpperCase())
         .is('used_by', null)
-        .gt('expires_at', new Date().toISOString())
+        .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
         .single();
 
     if (findError || !inviteCode) {
@@ -115,6 +127,21 @@ export async function getMyTeachers() {
 
     if (error) throw error;
     return data || [];
+}
+
+// Unlink from a teacher
+export async function unlinkTeacher(teacherId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+        .from('teacher_students')
+        .delete()
+        .eq('student_id', user.id)
+        .eq('teacher_id', teacherId);
+
+    if (error) throw error;
+    return { success: true };
 }
 
 // ============ DATA ACCESS FOR TEACHERS ============

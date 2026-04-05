@@ -594,7 +594,29 @@ export default function App() {
   }, [songs, lessons, loadingSongs, loadingLessons]);
 
   // Teacher mode: viewing a specific student's data
-  const [viewingStudentId, setViewingStudentId] = useState(null);
+  const VIEWING_STUDENT_KEY = 'lespal_viewing_student_id';
+  const [viewingStudentId, setViewingStudentId] = useState(() => {
+    return localStorage.getItem(VIEWING_STUDENT_KEY) || null;
+  });
+
+  useEffect(() => {
+    if (viewingStudentId) {
+      localStorage.setItem(VIEWING_STUDENT_KEY, viewingStudentId);
+    } else {
+      localStorage.removeItem(VIEWING_STUDENT_KEY);
+    }
+  }, [viewingStudentId]);
+
+  // Auto-select first student for teachers if none selected
+  useEffect(() => {
+    if (user && isTeacher && !localStorage.getItem(VIEWING_STUDENT_KEY)) {
+      sharingApi.getMyStudents().then(students => {
+        if (students && students.length === 1) {
+          setViewingStudentId(students[0].student_id);
+        }
+      }).catch(console.warn);
+    }
+  }, [user, isTeacher]);
   const [effectiveGeminiApiKey, setEffectiveGeminiApiKey] = useState("");
 
   const STALE_MS = 2 * 60 * 1000;
@@ -775,9 +797,14 @@ export default function App() {
       {/* Header */}
       <div className="sticky top-0 z-40 bg-transparent">
         <div className={`mx-auto max-w-[1440px] px-[36px] py-[24px] flex items-center justify-between h-[92px] transition-all duration-300 ${isMobile ? 'px-[20px] h-auto flex-wrap gap-4' : ''}`}>
-          {/* Logo */}
-          <div className="flex items-center shrink-0">
+          {/* Logo and Context */}
+          <div className="flex items-center shrink-0 gap-4">
             <img src={`${import.meta.env.BASE_URL}logo-dark.svg`} alt="Lespal" className="w-[90px] h-[44px]" />
+            {isTeacher && viewingStudentId && (
+              <Badge variant="outline" className="hidden md:inline-flex bg-[rgba(16,185,129,0.1)] text-emerald-400 border-[rgba(16,185,129,0.2)] px-3 py-1 font-['Inter_Tight'] font-medium whitespace-nowrap">
+                Student Data
+              </Badge>
+            )}
           </div>
 
           {/* Desktop Tabs */}

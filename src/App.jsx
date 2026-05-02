@@ -596,23 +596,26 @@ export default function App() {
   // Teacher mode: viewing a specific student's data
   const VIEWING_STUDENT_KEY = 'lespal_viewing_student_id';
   const [viewingStudentId, setViewingStudentId] = useState(() => {
-    return localStorage.getItem(VIEWING_STUDENT_KEY) || null;
+    const saved = localStorage.getItem(VIEWING_STUDENT_KEY);
+    return saved === 'MY_DATA' ? null : (saved || null);
   });
 
   useEffect(() => {
     if (viewingStudentId) {
       localStorage.setItem(VIEWING_STUDENT_KEY, viewingStudentId);
     } else {
-      localStorage.removeItem(VIEWING_STUDENT_KEY);
+      localStorage.setItem(VIEWING_STUDENT_KEY, 'MY_DATA');
     }
   }, [viewingStudentId]);
 
-  // Auto-select first student for teachers if none selected
+  // Auto-select first student for teachers if no selection has ever been made
   useEffect(() => {
     if (user && isTeacher && !localStorage.getItem(VIEWING_STUDENT_KEY)) {
       sharingApi.getMyStudents().then(students => {
-        if (students && students.length === 1) {
+        if (students && students.length >= 1) {
           setViewingStudentId(students[0].student_id);
+        } else {
+          localStorage.setItem(VIEWING_STUDENT_KEY, 'MY_DATA');
         }
       }).catch(console.warn);
     }
@@ -693,7 +696,8 @@ export default function App() {
       setSongs(s);
       // Only cache own data, not student data
       if (!viewingStudentId) {
-        ls.set(CACHE_KEY, { ...cache, songs: s, tsSongs: now });
+        const currentCache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
+        ls.set(CACHE_KEY, { ...currentCache, songs: s, tsSongs: now });
       }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
@@ -715,7 +719,8 @@ export default function App() {
       setLessons(l);
       // Only cache own data, not student data
       if (!viewingStudentId) {
-        ls.set(CACHE_KEY, { ...cache, lessons: l, tsLessons: now });
+        const currentCache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
+        ls.set(CACHE_KEY, { ...currentCache, lessons: l, tsLessons: now });
       }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);

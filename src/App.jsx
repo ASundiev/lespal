@@ -608,14 +608,22 @@ export default function App() {
     }
   }, [viewingStudentId]);
 
-  // Auto-select first student for teachers if no selection has ever been made
+  // Validate and auto-select active student for teachers
   useEffect(() => {
-    if (user && isTeacher && !localStorage.getItem(VIEWING_STUDENT_KEY)) {
+    if (user && isTeacher) {
       sharingApi.getMyStudents().then(students => {
-        if (students && students.length >= 1) {
-          setViewingStudentId(students[0].student_id);
+        const studentIds = (students || []).map(s => s.student_id);
+        if (studentIds.length === 0) {
+          setViewingStudentId(null);
+        } else if (studentIds.length === 1) {
+          setViewingStudentId(studentIds[0]);
         } else {
-          localStorage.setItem(VIEWING_STUDENT_KEY, 'MY_DATA');
+          setViewingStudentId(current => {
+            if (current && !studentIds.includes(current)) {
+              return null;
+            }
+            return current;
+          });
         }
       }).catch(console.warn);
     }

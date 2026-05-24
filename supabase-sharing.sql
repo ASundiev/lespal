@@ -24,15 +24,21 @@ ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_secrets ENABLE ROW LEVEL SECURITY;
 
 -- user_profiles Policies
+DROP POLICY IF EXISTS "Users can view own profile" ON user_profiles;
 CREATE POLICY "Users can view own profile" ON user_profiles FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update own profile" ON user_profiles;
 CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can insert own profile" ON user_profiles;
 CREATE POLICY "Users can insert own profile" ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Teachers can view student profiles" ON user_profiles;
 CREATE POLICY "Teachers can view student profiles" ON user_profiles FOR SELECT USING (EXISTS (SELECT 1 FROM teacher_students WHERE teacher_id = auth.uid() AND student_id = user_profiles.id));
 
 -- user_secrets Policies
+DROP POLICY IF EXISTS "Users can manage own secrets" ON user_secrets;
 CREATE POLICY "Users can manage own secrets" ON user_secrets FOR ALL USING (auth.uid() = id);
 
 -- Teachers can view their students' secrets (to run AI on student data)
+DROP POLICY IF EXISTS "Teachers can view student secrets" ON user_secrets;
 CREATE POLICY "Teachers can view student secrets" ON user_secrets
   FOR SELECT USING (
     EXISTS (
@@ -42,6 +48,7 @@ CREATE POLICY "Teachers can view student secrets" ON user_secrets
   );
 
 -- Students can view their teacher's secrets (to use teacher's API key)
+DROP POLICY IF EXISTS "Students can view teacher secrets" ON user_secrets;
 CREATE POLICY "Students can view teacher secrets" ON user_secrets
   FOR SELECT USING (
     EXISTS (
@@ -77,22 +84,36 @@ ALTER TABLE teacher_students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invite_codes ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS for teacher_students
+DROP POLICY IF EXISTS "Teachers can view their students" ON teacher_students;
 CREATE POLICY "Teachers can view their students" ON teacher_students
   FOR SELECT USING (auth.uid() = teacher_id);
 
+DROP POLICY IF EXISTS "Students can view their teachers" ON teacher_students;
 CREATE POLICY "Students can view their teachers" ON teacher_students
   FOR SELECT USING (auth.uid() = student_id);
 
+DROP POLICY IF EXISTS "Students can create relationships via invite" ON teacher_students;
 CREATE POLICY "Students can create relationships via invite" ON teacher_students
   FOR INSERT WITH CHECK (auth.uid() = student_id);
 
+DROP POLICY IF EXISTS "Students can delete relationships" ON teacher_students;
+CREATE POLICY "Students can delete relationships" ON teacher_students
+  FOR DELETE USING (auth.uid() = student_id);
+
+DROP POLICY IF EXISTS "Teachers can delete relationships" ON teacher_students;
+CREATE POLICY "Teachers can delete relationships" ON teacher_students
+  FOR DELETE USING (auth.uid() = teacher_id);
+
 -- 5. RLS for invite_codes
+DROP POLICY IF EXISTS "Teachers can manage their codes" ON invite_codes;
 CREATE POLICY "Teachers can manage their codes" ON invite_codes
   FOR ALL USING (auth.uid() = teacher_id);
 
+DROP POLICY IF EXISTS "Anyone can view unused codes to redeem" ON invite_codes;
 CREATE POLICY "Anyone can view unused codes to redeem" ON invite_codes
   FOR SELECT USING (used_by IS NULL AND expires_at > NOW());
 
+DROP POLICY IF EXISTS "Students can mark codes as used" ON invite_codes;
 CREATE POLICY "Students can mark codes as used" ON invite_codes
   FOR UPDATE USING (used_by IS NULL) 
   WITH CHECK (auth.uid() = used_by);
@@ -105,6 +126,7 @@ CREATE POLICY "Students can mark codes as used" ON invite_codes
 DROP POLICY IF EXISTS "Users can view their own songs" ON songs;
 
 -- Create new policy: owner OR their teacher
+DROP POLICY IF EXISTS "Owner or teacher can view songs" ON songs;
 CREATE POLICY "Owner or teacher can view songs" ON songs
   FOR SELECT USING (
     auth.uid() = user_id 
@@ -115,6 +137,7 @@ CREATE POLICY "Owner or teacher can view songs" ON songs
   );
 
 -- Teachers can also update student songs
+DROP POLICY IF EXISTS "Teachers can update student songs" ON songs;
 CREATE POLICY "Teachers can update student songs" ON songs
   FOR UPDATE USING (
     EXISTS (
@@ -124,10 +147,21 @@ CREATE POLICY "Teachers can update student songs" ON songs
   );
 
 -- Teachers can insert songs for students
+DROP POLICY IF EXISTS "Teachers can insert student songs" ON songs;
 CREATE POLICY "Teachers can insert student songs" ON songs
   FOR INSERT WITH CHECK (
     auth.uid() = user_id 
     OR EXISTS (
+      SELECT 1 FROM teacher_students 
+      WHERE teacher_id = auth.uid() AND student_id = songs.user_id
+    )
+  );
+
+-- Teachers can delete student songs
+DROP POLICY IF EXISTS "Teachers can delete student songs" ON songs;
+CREATE POLICY "Teachers can delete student songs" ON songs
+  FOR DELETE USING (
+    EXISTS (
       SELECT 1 FROM teacher_students 
       WHERE teacher_id = auth.uid() AND student_id = songs.user_id
     )
@@ -141,6 +175,7 @@ CREATE POLICY "Teachers can insert student songs" ON songs
 DROP POLICY IF EXISTS "Users can view their own lessons" ON lessons;
 
 -- Create new policy: owner OR their teacher
+DROP POLICY IF EXISTS "Owner or teacher can view lessons" ON lessons;
 CREATE POLICY "Owner or teacher can view lessons" ON lessons
   FOR SELECT USING (
     auth.uid() = user_id 
@@ -151,6 +186,7 @@ CREATE POLICY "Owner or teacher can view lessons" ON lessons
   );
 
 -- Teachers can also update student lessons
+DROP POLICY IF EXISTS "Teachers can update student lessons" ON lessons;
 CREATE POLICY "Teachers can update student lessons" ON lessons
   FOR UPDATE USING (
     EXISTS (
@@ -160,6 +196,7 @@ CREATE POLICY "Teachers can update student lessons" ON lessons
   );
 
 -- Teachers can insert lessons for students
+DROP POLICY IF EXISTS "Teachers can insert student lessons" ON lessons;
 CREATE POLICY "Teachers can insert student lessons" ON lessons
   FOR INSERT WITH CHECK (
     auth.uid() = user_id 
@@ -168,6 +205,17 @@ CREATE POLICY "Teachers can insert student lessons" ON lessons
       WHERE teacher_id = auth.uid() AND student_id = lessons.user_id
     )
   );
+
+-- Teachers can delete student lessons
+DROP POLICY IF EXISTS "Teachers can delete student lessons" ON lessons;
+CREATE POLICY "Teachers can delete student lessons" ON lessons
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM teacher_students 
+      WHERE teacher_id = auth.uid() AND student_id = lessons.user_id
+    )
+  );
+
 
 -- ============================================
 -- Done with schema! 

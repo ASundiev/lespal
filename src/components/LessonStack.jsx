@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 export function LessonStack({ lessons, isMobile, onEdit }) {
     const [index, setIndex] = useState(0);
+    const [direction, setDirection] = useState(0); // 1 for Next (Older), -1 for Prev (Newer)
 
     // Mobile Swipe Logic - MUST be called before any early returns to obey Rules of Hooks
     const x = useMotionValue(0);
@@ -17,8 +18,6 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
     if (!lessons || lessons.length === 0) {
         return <div className="text-center text-white/50 py-20">No lessons found. Add one!</div>;
     }
-
-    const [direction, setDirection] = useState(0); // 1 for Next (Older), -1 for Prev (Newer)
 
     // Ensure index is valid
     const safeIndex = Math.min(Math.max(0, index), lessons.length - 1);

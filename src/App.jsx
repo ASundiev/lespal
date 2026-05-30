@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 // — shadcn/ui components —
 import { Button } from "@/components/ui/button";
@@ -516,8 +516,10 @@ export default function App() {
   // showing stale/empty lessons to the teacher across hard refreshes.
   const [songs, setSongs] = useState([]);
   const [lessons, setLessons] = useState([]);
-  const [loadingSongs, setLoadingSongs] = useState(false);
-  const [loadingLessons, setLoadingLessons] = useState(false);
+  const [loadingSongs, setLoadingSongs] = useState(true);
+  const [loadingLessons, setLoadingLessons] = useState(true);
+  const songsRequestRef = useRef(0);
+  const lessonsRequestRef = useRef(0);
   const [openLessonModal, setOpenLessonModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [openAddSong, setOpenAddSong] = useState(false);
@@ -667,29 +669,35 @@ export default function App() {
   // Load songs directly from Supabase. Do not use the old shared localStorage
   // cache here: it can belong to the wrong account/view and survive hard refresh.
   const loadSongs = async () => {
+    const requestId = ++songsRequestRef.current;
     setLoadingSongs(true);
     try {
       const s = effectiveViewingStudentId
         ? await sharingApi.listStudentSongs(effectiveViewingStudentId)
         : await supabaseApi.listSongs();
       s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-      setSongs(s);
+      if (requestId === songsRequestRef.current) setSongs(s);
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
-    } finally { setLoadingSongs(false); }
+    } finally {
+      if (requestId === songsRequestRef.current) setLoadingSongs(false);
+    }
   };
 
   // Load lessons directly from Supabase for the current effective owner.
   const loadLessons = async () => {
+    const requestId = ++lessonsRequestRef.current;
     setLoadingLessons(true);
     try {
       const l = effectiveViewingStudentId
         ? await sharingApi.listStudentLessons(effectiveViewingStudentId)
         : await supabaseApi.listLessons();
-      setLessons(l);
+      if (requestId === lessonsRequestRef.current) setLessons(l);
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
-    } finally { setLoadingLessons(false); }
+    } finally {
+      if (requestId === lessonsRequestRef.current) setLoadingLessons(false);
+    }
   };
 
   // Enriched Lessons (mapping song IDs to objects)

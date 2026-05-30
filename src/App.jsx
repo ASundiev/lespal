@@ -512,11 +512,10 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
 
-  // Cache - all hooks must be called unconditionally (before any early returns)
-  const CACHE_KEY = 'lespal_cache_v1';
-  const initialCache = useMemo(() => ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 }), []);
-  const [songs, setSongs] = useState(initialCache.songs || []);
-  const [lessons, setLessons] = useState(initialCache.lessons || []);
+  // Always load live Supabase data after auth. A single browser-wide cache was
+  // showing stale/empty lessons to the teacher across hard refreshes.
+  const [songs, setSongs] = useState([]);
+  const [lessons, setLessons] = useState([]);
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [loadingLessons, setLoadingLessons] = useState(false);
   const [openLessonModal, setOpenLessonModal] = useState(false);
@@ -572,25 +571,24 @@ export default function App() {
     const saved = localStorage.getItem(VIEWING_STUDENT_KEY);
     return saved === 'MY_DATA' ? null : (saved || null);
   });
+  const hardcodedStudentId = user?.id === LESPAL_PAIRING.teacherId ? LESPAL_PAIRING.studentId : null;
+  const effectiveViewingStudentId = hardcodedStudentId || viewingStudentId;
 
   useEffect(() => {
-    if (viewingStudentId) {
-      localStorage.setItem(VIEWING_STUDENT_KEY, viewingStudentId);
+    if (effectiveViewingStudentId) {
+      localStorage.setItem(VIEWING_STUDENT_KEY, effectiveViewingStudentId);
     } else {
       localStorage.setItem(VIEWING_STUDENT_KEY, 'MY_DATA');
     }
-  }, [viewingStudentId]);
+  }, [effectiveViewingStudentId]);
 
   // Private two-person mode: the teacher should always land directly on the
   // student's data. Supabase RLS still decides whether access is allowed; this
   // just removes the old invite-code/manual-selection workflow from the UI.
   useEffect(() => {
-    if (user && isTeacher) {
-      if (user.id === LESPAL_PAIRING.teacherId) {
-        setViewingStudentId(LESPAL_PAIRING.studentId);
-        return;
-      }
+    if (hardcodedStudentId) return;
 
+    if (user && isTeacher) {
       sharingApi.getMyStudents().then(students => {
         const studentIds = (students || []).map(s => s.student_id);
         if (studentIds.length === 0) {
@@ -607,10 +605,8 @@ export default function App() {
         }
       }).catch(console.warn);
     }
-  }, [user, isTeacher]);
+  }, [user, isTeacher, hardcodedStudentId]);
   const [effectiveGeminiApiKey, setEffectiveGeminiApiKey] = useState("");
-
-  const STALE_MS = 2 * 60 * 1000;
 
   // Resolve effective Gemini API key (Self -> Teacher -> Student)
   useEffect(() => {
@@ -644,8 +640,8 @@ export default function App() {
         }
 
         // 4. If teacher viewing student, try student's secrets
-        if (isTeacher && viewingStudentId) {
-          const studentSecrets = await supabaseApi.getSecrets(viewingStudentId);
+        if (isTeacher && effectiveViewingStudentId) {
+          const studentSecrets = await supabaseApi.getSecrets(effectiveViewingStudentId);
           if (studentSecrets?.gemini_api_key) {
             setEffectiveGeminiApiKey(studentSecrets.gemini_api_key);
             return;
@@ -659,7 +655,7 @@ export default function App() {
     }
 
     if (user) resolveApiKey();
-  }, [user, viewingStudentId, settings.geminiApiKey, isTeacher]);
+  }, [user, effectiveViewingStudentId, settings.geminiApiKey, isTeacher]);
 
   // Sync API Key to Supabase when updated in settings
   useEffect(() => {
@@ -668,48 +664,29 @@ export default function App() {
     }
   }, [settings.geminiApiKey, user]);
 
-  // Load songs - Supabase first, fallback to Google Sheets
-  const loadSongs = async (force = false) => {
-    const now = Date.now();
-    const cache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-    // Skip cache check when viewing student data
-    if (!viewingStudentId && !force && (now - (cache.tsSongs || 0) <= STALE_MS) && songs.length > 0) return;
+  // Load songs directly from Supabase. Do not use the old shared localStorage
+  // cache here: it can belong to the wrong account/view and survive hard refresh.
+  const loadSongs = async () => {
     setLoadingSongs(true);
     try {
-      // If viewing a student's data, use student-specific API
-      const s = viewingStudentId
-        ? await sharingApi.listStudentSongs(viewingStudentId)
+      const s = effectiveViewingStudentId
+        ? await sharingApi.listStudentSongs(effectiveViewingStudentId)
         : await supabaseApi.listSongs();
       s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       setSongs(s);
-      // Only cache own data, not student data
-      if (!viewingStudentId) {
-        const currentCache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-        ls.set(CACHE_KEY, { ...currentCache, songs: s, tsSongs: now });
-      }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
     } finally { setLoadingSongs(false); }
   };
 
-  // Load lessons - Supabase first, fallback to Google Sheets
-  const loadLessons = async (force = false) => {
-    const now = Date.now();
-    const cache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-    // Skip cache check when viewing student data
-    if (!viewingStudentId && !force && (now - (cache.tsLessons || 0) <= STALE_MS) && lessons.length > 0) return;
+  // Load lessons directly from Supabase for the current effective owner.
+  const loadLessons = async () => {
     setLoadingLessons(true);
     try {
-      // If viewing a student's data, use student-specific API
-      const l = viewingStudentId
-        ? await sharingApi.listStudentLessons(viewingStudentId)
+      const l = effectiveViewingStudentId
+        ? await sharingApi.listStudentLessons(effectiveViewingStudentId)
         : await supabaseApi.listLessons();
       setLessons(l);
-      // Only cache own data, not student data
-      if (!viewingStudentId) {
-        const currentCache = ls.get(CACHE_KEY, { songs: [], lessons: [], tsSongs: 0, tsLessons: 0 });
-        ls.set(CACHE_KEY, { ...currentCache, lessons: l, tsLessons: now });
-      }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
     } finally { setLoadingLessons(false); }
@@ -725,13 +702,13 @@ export default function App() {
     });
   }, [lessons, songs]);
 
-  // Load data when user or viewing student changes
+  // Load data when user or effective student view changes
   useEffect(() => {
     if (user) {
-      loadSongs(true);
-      loadLessons(true);
+      loadSongs();
+      loadLessons();
     }
-  }, [user, viewingStudentId]);
+  }, [user, effectiveViewingStudentId]);
 
   // Show loading state
   if (authLoading) {
@@ -752,9 +729,9 @@ export default function App() {
       if (payload?.id) {
         await supabaseApi.updateSong(payload.id, payload);
       } else {
-        await supabaseApi.createSong(payload, viewingStudentId);
+        await supabaseApi.createSong(payload, effectiveViewingStudentId);
       }
-      await loadSongs(true);
+      await loadSongs();
     } catch (e) { alert(e.message); }
   };
 
@@ -763,16 +740,16 @@ export default function App() {
       if (payload?.id) {
         await supabaseApi.updateLesson(payload.id, payload);
       } else {
-        await supabaseApi.createLesson(payload, viewingStudentId);
+        await supabaseApi.createLesson(payload, effectiveViewingStudentId);
       }
-      await loadLessons(true);
+      await loadLessons();
     } catch (e) { alert(e.message); }
   };
 
   const handleDeleteLesson = async (id) => {
     try {
       await supabaseApi.deleteLesson(id);
-      await loadLessons(true);
+      await loadLessons();
     } catch (e) { alert(e.message); }
   };
 
@@ -793,7 +770,7 @@ export default function App() {
           {/* Logo and Context */}
           <div className="flex items-center shrink-0 gap-4">
             <img src={`${import.meta.env.BASE_URL}logo-dark.svg`} alt="Lespal" className="w-[90px] h-[44px]" />
-            {isTeacher && viewingStudentId && (
+            {isTeacher && effectiveViewingStudentId && (
               <Badge variant="outline" className="hidden md:inline-flex bg-[rgba(16,185,129,0.1)] text-emerald-400 border-[rgba(16,185,129,0.2)] px-3 py-1 font-['Inter_Tight'] font-medium whitespace-nowrap">
                 Student Data
               </Badge>
@@ -885,8 +862,11 @@ export default function App() {
       <div className="flex-1 z-10 relative">
         {tab === 'lessons' && (
           <div className={`w-full flex justify-center ${isMobile ? 'mt-[24px] px-[16px]' : 'mt-[120px] px-[36px]'}`}>
-            {/* Desktop needs room for nav buttons, Mobile uses full width minus internal padding */}
-            <LessonStack lessons={enrichedLessons} isMobile={isMobile} onEdit={(lesson) => { setEditingLesson(lesson); setOpenLessonModal(true); }} />
+            {loadingLessons ? (
+              <div className="text-center text-white/50 py-20">Loading lessons...</div>
+            ) : (
+              <LessonStack lessons={enrichedLessons} isMobile={isMobile} onEdit={(lesson) => { setEditingLesson(lesson); setOpenLessonModal(true); }} />
+            )}
           </div>
         )}
         {tab === 'songs' && (

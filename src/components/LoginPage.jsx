@@ -16,16 +16,21 @@ export function LoginPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const formData = new FormData(e.currentTarget);
+        const submittedEmail = String(formData.get('email') || email).trim();
+        const submittedPassword = String(formData.get('password') || password);
+        setEmail(submittedEmail);
+        setPassword(submittedPassword);
         setError('');
         setMessage('');
         setLoading(true);
 
         try {
             if (isLogin) {
-                await signIn(email, password);
+                await signIn(submittedEmail, submittedPassword);
             } else {
                 // Sign up
-                const { data, error: signUpError } = await signUp(email, password);
+                const { data, error: signUpError } = await signUp(submittedEmail, submittedPassword);
                 if (signUpError) throw signUpError;
 
                 // Create user profile with selected role
@@ -34,7 +39,7 @@ export function LoginPage() {
                         .from('user_profiles')
                         .insert({
                             id: data.user.id,
-                            email: email,
+                            email: submittedEmail,
                             role: role
                         });
 
@@ -101,6 +106,8 @@ export function LoginPage() {
                     <div className="flex flex-col gap-2">
                         <label className={labelClass}>Email</label>
                         <input
+                            name="email"
+                            autoComplete="email"
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -113,6 +120,8 @@ export function LoginPage() {
                     <div className="flex flex-col gap-2">
                         <label className={labelClass}>Password</label>
                         <input
+                            name="password"
+                            autoComplete={isLogin ? 'current-password' : 'new-password'}
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}

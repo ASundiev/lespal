@@ -12,15 +12,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { LessonStack } from "@/components/LessonStack";
 import { AddLessonModal } from "@/components/AddLessonModal";
-import { CopyPlus, Settings, ChevronLeft, ChevronRight, Share, Search, ChevronDown, ImageUp, Loader2, LogOut, X, Sparkles } from 'lucide-react';
+import { CopyPlus, Settings, ChevronLeft, ChevronRight, Search, ChevronDown, ImageUp, Loader2, LogOut, X, Sparkles } from 'lucide-react';
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
 import { useAuth } from "@/context/AuthContext";
 import { LoginPage } from "@/components/LoginPage";
 import * as supabaseApi from "@/lib/supabaseApi";
 import * as sharingApi from "@/lib/sharingApi";
-import { TeacherPanel, StudentLinkPanel } from "@/components/SharingPanels";
 import { InsightsTab } from "@/components/InsightsTab";
+import { LESPAL_PAIRING } from "@/lib/privatePairing";
 
 // ---------------------------
 // Helpers
@@ -422,7 +422,7 @@ function SongsTab({ items, loading, onEdit, neglectedSongs = [], nudgeVisible = 
 // ---------------------------
 // SETTINGS
 // ---------------------------
-function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewingStudentId, onStudentSelect }) {
+function SettingsModal({ open, onClose, settings, setSettings }) {
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
 
   useEffect(() => {
@@ -464,33 +464,6 @@ function SettingsModal({ open, onClose, settings, setSettings, isTeacher, viewin
         {/* Card Content */}
         <div className="p-[36px] flex-1 flex flex-col max-h-[70vh] overflow-y-auto custom-scrollbar">
           <div className="flex flex-col gap-10 flex-1">
-            {/* Sharing Section */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Share size={16} className="text-[rgba(255,255,255,0.48)]" />
-                <h3 className="text-[rgba(255,255,255,0.8)] font-semibold font-['Inter_Tight'] text-[14px] uppercase tracking-wider">Sharing</h3>
-              </div>
-              {isTeacher ? (
-                <TeacherPanel
-                  onStudentSelect={(id) => { onStudentSelect(id); onClose(); }}
-                  selectedStudentId={viewingStudentId}
-                />
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className={labelClass}>
-                    Connect to Teacher
-                  </div>
-                  <div className="text-[rgba(255,255,255,0.64)] text-[14px]">
-                    Enter your teacher's invite code to share your data with them.
-                  </div>
-                  <StudentLinkPanel />
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="h-[1px] bg-[rgba(255,255,255,0.08)] w-full" />
-
             {/* AI Section */}
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-2 mb-2">
@@ -608,9 +581,16 @@ export default function App() {
     }
   }, [viewingStudentId]);
 
-  // Validate and auto-select active student for teachers
+  // Private two-person mode: the teacher should always land directly on the
+  // student's data. Supabase RLS still decides whether access is allowed; this
+  // just removes the old invite-code/manual-selection workflow from the UI.
   useEffect(() => {
     if (user && isTeacher) {
+      if (user.id === LESPAL_PAIRING.teacherId) {
+        setViewingStudentId(LESPAL_PAIRING.studentId);
+        return;
+      }
+
       sharingApi.getMyStudents().then(students => {
         const studentIds = (students || []).map(s => s.student_id);
         if (studentIds.length === 0) {
@@ -946,9 +926,6 @@ export default function App() {
         onClose={() => setShowSettings(false)}
         settings={settings}
         setSettings={setSettings}
-        isTeacher={isTeacher}
-        viewingStudentId={viewingStudentId}
-        onStudentSelect={setViewingStudentId}
       />
     </div>
   );

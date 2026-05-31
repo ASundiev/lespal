@@ -52,6 +52,16 @@ const ls = {
 
 const SETTINGS_KEY = "lespal_settings_v1";
 const NUDGE_DISMISS_KEY = "lespal_nudge_dismissed_until";
+const BUILD_ID = "2026-05-31-loading-timeout";
+const DATA_LOAD_TIMEOUT_MS = 15000;
+
+function withTimeout(promise, label, timeoutMs = DATA_LOAD_TIMEOUT_MS) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
 
 function useSettings() {
   const [settings, setSettings] = useState(() => ls.get(SETTINGS_KEY, { geminiApiKey: "" }));
@@ -518,6 +528,7 @@ export default function App() {
   const [lessons, setLessons] = useState([]);
   const [loadingSongs, setLoadingSongs] = useState(true);
   const [loadingLessons, setLoadingLessons] = useState(true);
+  const [lessonsError, setLessonsError] = useState(null);
   const songsRequestRef = useRef(0);
   const lessonsRequestRef = useRef(0);
   const [openLessonModal, setOpenLessonModal] = useState(false);
@@ -672,9 +683,12 @@ export default function App() {
     const requestId = ++songsRequestRef.current;
     setLoadingSongs(true);
     try {
-      const s = effectiveViewingStudentId
-        ? await sharingApi.listStudentSongs(effectiveViewingStudentId)
-        : await supabaseApi.listSongs();
+      const s = await withTimeout(
+        effectiveViewingStudentId
+          ? sharingApi.listStudentSongs(effectiveViewingStudentId)
+          : supabaseApi.listSongs(),
+        'Loading songs'
+      );
       s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       if (requestId === songsRequestRef.current) setSongs(s);
     } catch (supabaseError) {
@@ -688,13 +702,20 @@ export default function App() {
   const loadLessons = async () => {
     const requestId = ++lessonsRequestRef.current;
     setLoadingLessons(true);
+    setLessonsError(null);
     try {
-      const l = effectiveViewingStudentId
-        ? await sharingApi.listStudentLessons(effectiveViewingStudentId)
-        : await supabaseApi.listLessons();
+      const l = await withTimeout(
+        effectiveViewingStudentId
+          ? sharingApi.listStudentLessons(effectiveViewingStudentId)
+          : supabaseApi.listLessons(),
+        'Loading lessons'
+      );
       if (requestId === lessonsRequestRef.current) setLessons(l);
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
+      if (requestId === lessonsRequestRef.current) {
+        setLessonsError(supabaseError?.message || 'Could not load lessons');
+      }
     } finally {
       if (requestId === lessonsRequestRef.current) setLoadingLessons(false);
     }
@@ -762,7 +783,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground bg-[#161616] overflow-hidden relative font-sans">
+    <div data-build-id={BUILD_ID} className="min-h-screen bg-background text-foreground bg-[#161616] overflow-hidden relative font-sans">
       {/* Background Blurs */}
       {/* Background Blurs */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -872,6 +893,11 @@ export default function App() {
           <div className={`w-full flex justify-center ${isMobile ? 'mt-[24px] px-[16px]' : 'mt-[120px] px-[36px]'}`}>
             {loadingLessons ? (
               <div className="text-center text-white/50 py-20">Loading lessons...</div>
+            ) : lessonsError ? (
+              <div className="text-center text-white/50 py-20 space-y-3">
+                <div>Could not load lessons: {lessonsError}</div>
+                <button onClick={loadLessons} className="underline text-white/80 hover:text-white">Retry</button>
+              </div>
             ) : (
               <LessonStack lessons={enrichedLessons} isMobile={isMobile} onEdit={(lesson) => { setEditingLesson(lesson); setOpenLessonModal(true); }} />
             )}

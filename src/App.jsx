@@ -52,7 +52,7 @@ const ls = {
 
 const SETTINGS_KEY = "lespal_settings_v1";
 const NUDGE_DISMISS_KEY = "lespal_nudge_dismissed_until";
-const BUILD_ID = "2026-05-31-loading-retry";
+const BUILD_ID = "2026-05-31-proxy-fallback";
 const DATA_LOAD_TIMEOUT_MS = 30000;
 const DATA_LOAD_ATTEMPTS = 2;
 

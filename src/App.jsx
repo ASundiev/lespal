@@ -52,8 +52,9 @@ const ls = {
 
 const SETTINGS_KEY = "lespal_settings_v1";
 const NUDGE_DISMISS_KEY = "lespal_nudge_dismissed_until";
-const BUILD_ID = "2026-05-31-loading-timeout";
-const DATA_LOAD_TIMEOUT_MS = 15000;
+const BUILD_ID = "2026-05-31-loading-retry";
+const DATA_LOAD_TIMEOUT_MS = 30000;
+const DATA_LOAD_ATTEMPTS = 2;
 
 function withTimeout(promise, label, timeoutMs = DATA_LOAD_TIMEOUT_MS) {
   let timeoutId;
@@ -61,6 +62,19 @@ function withTimeout(promise, label, timeoutMs = DATA_LOAD_TIMEOUT_MS) {
     timeoutId = window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
+async function loadWithRetry(factory, label, attempts = DATA_LOAD_ATTEMPTS) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await withTimeout(factory(), `${label} attempt ${attempt}`);
+    } catch (error) {
+      lastError = error;
+      console.warn(`${label} failed on attempt ${attempt}/${attempts}:`, error);
+    }
+  }
+  throw new Error(`${label} failed after ${attempts} attempts: ${lastError?.message || 'unknown error'}`);
 }
 
 function useSettings() {
@@ -683,8 +697,8 @@ export default function App() {
     const requestId = ++songsRequestRef.current;
     setLoadingSongs(true);
     try {
-      const s = await withTimeout(
-        effectiveViewingStudentId
+      const s = await loadWithRetry(
+        () => effectiveViewingStudentId
           ? sharingApi.listStudentSongs(effectiveViewingStudentId)
           : supabaseApi.listSongs(),
         'Loading songs'
@@ -704,8 +718,8 @@ export default function App() {
     setLoadingLessons(true);
     setLessonsError(null);
     try {
-      const l = await withTimeout(
-        effectiveViewingStudentId
+      const l = await loadWithRetry(
+        () => effectiveViewingStudentId
           ? sharingApi.listStudentLessons(effectiveViewingStudentId)
           : supabaseApi.listLessons(),
         'Loading lessons'
@@ -896,6 +910,9 @@ export default function App() {
             ) : lessonsError ? (
               <div className="text-center text-white/50 py-20 space-y-3">
                 <div>Could not load lessons: {lessonsError}</div>
+                <div className="text-xs text-white/30 max-w-md mx-auto">
+                  Your browser could not reach the Lespal database in time. Check the network and try again.
+                </div>
                 <button onClick={loadLessons} className="underline text-white/80 hover:text-white">Retry</button>
               </div>
             ) : (

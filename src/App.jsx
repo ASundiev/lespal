@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { motion } from "framer-motion";
 // — shadcn/ui components —
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,13 @@ import { CopyPlus, Settings, ChevronLeft, ChevronRight, Search, ChevronDown, Ima
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
 import { useAuth } from "@/context/AuthContext";
-import { LoginPage } from "@/components/LoginPage";
 import * as supabaseApi from "@/lib/supabaseApi";
 import * as sharingApi from "@/lib/sharingApi";
-import { InsightsTab } from "@/components/InsightsTab";
 import { LESPAL_PAIRING } from "@/lib/privatePairing";
+
+const InsightsTab = lazy(() =>
+  import("@/components/InsightsTab").then((module) => ({ default: module.InsightsTab }))
+);
 
 // ---------------------------
 // Helpers
@@ -532,6 +534,7 @@ function SettingsModal({ open, onClose, settings, setSettings }) {
 export default function App() {
   const { user, loading: authLoading, signOut, isTeacher } = useAuth();
   const [tab, setTab] = useState("lessons");
+  const [isTabPending, startTabTransition] = useTransition();
   const [settings, setSettings] = useSettings();
   const [showSettings, setShowSettings] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -549,6 +552,10 @@ export default function App() {
   const [editingLesson, setEditingLesson] = useState(null);
   const [openAddSong, setOpenAddSong] = useState(false);
   const [editingSong, setEditingSong] = useState(null);
+
+  const handleTabChange = (nextTab) => {
+    startTabTransition(() => setTab(nextTab));
+  };
 
   // Nudge Dismissal State
   const [nudgeDismissedUntil, setNudgeDismissedUntil] = useState(() => {
@@ -762,10 +769,8 @@ export default function App() {
     );
   }
 
-  // Show login page if not authenticated
-  if (!user) {
-    return <LoginPage />;
-  }
+  // AppShell owns login rendering. Keep a safe fallback for stale lazy renders.
+  if (!user) return null;
 
   const handleUpsertSong = async (payload) => {
     try {
@@ -834,9 +839,9 @@ export default function App() {
                 }}
               />
               <div className="flex gap-[20px] px-[24px] py-[12px] rounded-full bg-transparent relative z-10">
-                <button onClick={() => setTab('lessons')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Lessons</button>
-                <button onClick={() => setTab('songs')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Songs</button>
-                <button onClick={() => setTab('insights')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Insights</button>
+                <button onClick={() => handleTabChange('lessons')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Lessons</button>
+                <button onClick={() => handleTabChange('songs')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Songs</button>
+                <button onClick={() => handleTabChange('insights')} className={`text-[16px] font-semibold font-['Inter_Tight'] leading-[20px] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)] hover:text-white/80'}`}>Insights</button>
               </div>
             </div>
           )}
@@ -892,9 +897,9 @@ export default function App() {
                 }}
               />
               <div className="flex items-center justify-between px-[48px] py-[16px] rounded-full bg-transparent relative z-10">
-                <button onClick={() => setTab('lessons')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Lessons</button>
-                <button onClick={() => setTab('songs')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Songs</button>
-                <button onClick={() => setTab('insights')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Insights</button>
+                <button onClick={() => handleTabChange('lessons')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'lessons' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Lessons</button>
+                <button onClick={() => handleTabChange('songs')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'songs' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Songs</button>
+                <button onClick={() => handleTabChange('insights')} className={`text-[18px] font-semibold font-['Inter_Tight'] leading-[1.5] transition-all ${tab === 'insights' ? 'text-white' : 'text-[rgba(255,255,255,0.64)]'}`}>Insights</button>
               </div>
             </div>
           )}
@@ -903,6 +908,7 @@ export default function App() {
 
       {/* Content */}
       <div className="flex-1 z-10 relative">
+        {isTabPending && <div className="sr-only" aria-live="polite">Switching tabs…</div>}
         {tab === 'lessons' && (
           <div className={`w-full flex justify-center ${isMobile ? 'mt-[24px] px-[16px]' : 'mt-[120px] px-[36px]'}`}>
             {loadingLessons ? (
@@ -932,7 +938,9 @@ export default function App() {
         )}
 
         {tab === 'insights' && (
-          <InsightsTab songs={songs} lessons={enrichedLessons} geminiApiKey={effectiveGeminiApiKey} />
+          <Suspense fallback={<div className="text-center text-white/50 py-20">Loading insights...</div>}>
+            <InsightsTab songs={songs} lessons={enrichedLessons} geminiApiKey={effectiveGeminiApiKey} />
+          </Suspense>
         )}
       </div>
 

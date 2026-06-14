@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { DesktopLessonCard } from "./DesktopLessonCard";
 import { MobileLessonCard } from "./MobileLessonCard";
@@ -13,6 +13,10 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
     const x = useMotionValue(0);
     const rotate = useTransform(x, [-200, 200], [-5, 5]); // Subtle rotation
     const opacity = useTransform(x, [-150, 0, 150], [0.5, 1, 0.5]);
+
+    useEffect(() => {
+        x.set(0);
+    }, [index, x]);
 
     // If empty - render early return AFTER all hooks
     if (!lessons || lessons.length === 0) {
@@ -137,7 +141,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                                 className="absolute top-0 left-0 w-full"
                                 style={{
                                     transformOrigin: "center top",
-                                    ...(isMobile && isFront ? { x, rotate, opacity } : {})
+                                    ...(isMobile && isFront ? { x, rotate, opacity, touchAction: "pan-y" } : {})
                                 }}
                                 initial={isFront ? "hidden" : `back${i}`} // If appearing as front, fade in? Or just be.
                                 animate={isFront ? "front" : i === 1 ? "back1" : "back2"}
@@ -145,6 +149,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                                 variants={variants}
                                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
                                 drag={isMobile && isFront ? "x" : false}
+                                dragDirectionLock
                                 dragConstraints={{ left: -1000, right: 1000 }} // Allow full dragging
                                 dragElastic={0.1} // Better feel than 0.05
                                 onDragEnd={onDragEnd}

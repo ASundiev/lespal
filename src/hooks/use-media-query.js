@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 export function useMediaQuery(query) {
-    const [value, setValue] = useState(false);
+    const [value, setValue] = useState(() => matchMedia(query).matches);
 
     useEffect(() => {
         function onChange(event) {

@@ -1,9 +1,11 @@
 import React from "react";
 import { Pill } from "./ui/pill";
+import { SquarePen } from "lucide-react";
+import { formatLessonDate } from "@/lib/dateUtils";
 
-export function MobileLessonCard({ lesson, previousCount, className }) {
+export function MobileLessonCard({ lesson, previousCount, className, onEdit }) {
     // Use same date format as desktop: "10 Dec 2025"
-    const dateStr = new Date(lesson.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const dateStr = formatLessonDate(lesson.date);
 
     return (
         <div className={`relative w-full h-full rounded-[24px] overflow-hidden border border-[#3f3069]/50 bg-[#16141a] flex flex-col ${className}`}>
@@ -26,6 +28,16 @@ export function MobileLessonCard({ lesson, previousCount, className }) {
                     {lesson.notes}
                 </p>
             </div>
+            {onEdit && (
+                <button
+                    type="button"
+                    aria-label={`Edit lesson from ${dateStr}`}
+                    onClick={() => onEdit(lesson)}
+                    className="absolute bottom-4 right-4 flex size-12 items-center justify-center rounded-full border border-[#ebac00] bg-[#fc0] text-[#181723] shadow-lg"
+                >
+                    <SquarePen size={20} />
+                </button>
+            )}
         </div>
     );
 }

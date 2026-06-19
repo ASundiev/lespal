@@ -2,17 +2,13 @@ import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
 
 export function LoginPage() {
-    const { signIn, signUp } = useAuth();
-    const [isLogin, setIsLogin] = useState(true);
+    const { signIn } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('student'); // 'student' or 'teacher'
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [message, setMessage] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -22,35 +18,10 @@ export function LoginPage() {
         setEmail(submittedEmail);
         setPassword(submittedPassword);
         setError('');
-        setMessage('');
         setLoading(true);
 
         try {
-            if (isLogin) {
-                await signIn(submittedEmail, submittedPassword);
-            } else {
-                // Sign up
-                const { data, error: signUpError } = await signUp(submittedEmail, submittedPassword);
-                if (signUpError) throw signUpError;
-
-                // Create user profile with selected role
-                if (data?.user) {
-                    const { error: profileError } = await supabase
-                        .from('user_profiles')
-                        .insert({
-                            id: data.user.id,
-                            email: submittedEmail,
-                            role: role
-                        });
-
-                    if (profileError) {
-                        console.warn('Failed to create profile:', profileError);
-                        // Don't throw - user can still use the app, profile just won't have role
-                    }
-                }
-
-                setMessage('Check your email for confirmation link!');
-            }
+            await signIn(submittedEmail, submittedPassword);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -88,18 +59,12 @@ export function LoginPage() {
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-[36px] flex flex-col gap-6">
                     <h1 className="text-white font-['Inter_Tight'] font-semibold text-[24px] text-center">
-                        {isLogin ? 'Welcome back' : 'Create account'}
+                        Welcome back
                     </h1>
 
                     {error && (
                         <div className="bg-red-500/10 border border-red-500/30 rounded-[12px] px-4 py-3 text-red-400 text-sm">
                             {error}
-                        </div>
-                    )}
-
-                    {message && (
-                        <div className="bg-green-500/10 border border-green-500/30 rounded-[12px] px-4 py-3 text-green-400 text-sm">
-                            {message}
                         </div>
                     )}
 
@@ -121,7 +86,7 @@ export function LoginPage() {
                         <label className={labelClass}>Password</label>
                         <input
                             name="password"
-                            autoComplete={isLogin ? 'current-password' : 'new-password'}
+                            autoComplete="current-password"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -132,50 +97,13 @@ export function LoginPage() {
                         />
                     </div>
 
-                    {/* Role Selection - only shown during signup */}
-                    {!isLogin && (
-                        <div className="flex flex-col gap-2">
-                            <label className={labelClass}>I am a...</label>
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setRole('student')}
-                                    className={`flex-1 px-4 py-3 rounded-full border transition-all font-medium text-[14px] ${role === 'student'
-                                            ? 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.24)] text-white'
-                                            : 'bg-transparent border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.48)] hover:bg-[rgba(255,255,255,0.04)]'
-                                        }`}
-                                >
-                                    Student
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setRole('teacher')}
-                                    className={`flex-1 px-4 py-3 rounded-full border transition-all font-medium text-[14px] ${role === 'teacher'
-                                            ? 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.24)] text-white'
-                                            : 'bg-transparent border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.48)] hover:bg-[rgba(255,255,255,0.04)]'
-                                        }`}
-                                >
-                                    Teacher
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     <Button type="submit" disabled={loading} className="w-full h-[48px]">
                         {loading ? (
                             <Loader2 size={20} className="animate-spin" />
                         ) : (
-                            isLogin ? 'Sign in' : 'Sign up'
+                            'Sign in'
                         )}
                     </Button>
-
-                    <button
-                        type="button"
-                        onClick={() => { setIsLogin(!isLogin); setError(''); setMessage(''); }}
-                        className="text-[rgba(255,255,255,0.48)] hover:text-white text-sm transition-colors"
-                    >
-                        {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-                    </button>
                 </form>
             </div>
         </div>

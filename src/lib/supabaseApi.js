@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient';
+import { LESPAL_WORKSPACE_ID } from './sharedWorkspace';
 
 /**
- * Supabase API functions for songs and lessons.
- * These mirror the existing Google Sheets API but use Supabase.
+ * Supabase API functions for Lespal's single shared library.
  */
 
 // ============ SONGS ============
@@ -11,19 +11,17 @@ export async function listSongs() {
     const { data, error } = await supabase
         .from('songs')
         .select('*')
+        .eq('user_id', LESPAL_WORKSPACE_ID)
         .order('title');
 
     if (error) throw error;
     return data || [];
 }
 
-export async function createSong(song, targetUserId = null) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
+export async function createSong(song) {
     const { data, error } = await supabase
         .from('songs')
-        .insert({ ...song, user_id: targetUserId || user.id })
+        .insert({ ...song, user_id: LESPAL_WORKSPACE_ID })
         .select()
         .single();
 
@@ -32,14 +30,16 @@ export async function createSong(song, targetUserId = null) {
 }
 
 export async function updateSong(id, updates) {
-    const { data, error } = await supabase
+    const { id: _id, user_id: _userId, created_at: _createdAt, expected_updated_at, ...changes } = updates;
+    let query = supabase
         .from('songs')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
+        .update({ ...changes, updated_at: new Date().toISOString() })
+        .eq('id', id);
+    if (expected_updated_at) query = query.eq('updated_at', expected_updated_at);
+    const { data, error } = await query.select().maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('This song changed on another device. Reopen it and try again.');
     return data;
 }
 
@@ -49,19 +49,17 @@ export async function listLessons() {
     const { data, error } = await supabase
         .from('lessons')
         .select('*')
+        .eq('user_id', LESPAL_WORKSPACE_ID)
         .order('date', { ascending: false });
 
     if (error) throw error;
     return data || [];
 }
 
-export async function createLesson(lesson, targetUserId = null) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
+export async function createLesson(lesson) {
     const { data, error } = await supabase
         .from('lessons')
-        .insert({ ...lesson, user_id: targetUserId || user.id })
+        .insert({ ...lesson, user_id: LESPAL_WORKSPACE_ID })
         .select()
         .single();
 
@@ -70,14 +68,16 @@ export async function createLesson(lesson, targetUserId = null) {
 }
 
 export async function updateLesson(id, updates) {
-    const { data, error } = await supabase
+    const { id: _id, user_id: _userId, created_at: _createdAt, songs: _songs, expected_updated_at, ...changes } = updates;
+    let query = supabase
         .from('lessons')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
+        .update({ ...changes, updated_at: new Date().toISOString() })
+        .eq('id', id);
+    if (expected_updated_at) query = query.eq('updated_at', expected_updated_at);
+    const { data, error } = await query.select().maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('This lesson changed on another device. Reopen it and try again.');
     return data;
 }
 
@@ -89,69 +89,24 @@ export async function deleteLesson(id) {
 
     if (error) throw error;
 }
-// ============ PROFILE & SETTINGS ============
 
-export async function getProfile(userId) {
-    const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId || (await supabase.auth.getUser()).data.user?.id)
-        .single();
+// Keep both open apps in sync while ignoring unrelated database rows.
+export function subscribeToLibrary(onChange, onStatus = () => {}) {
+    const emitIfSharedLibrary = table => payload => {
+        const changedOwnerId = payload.new?.user_id || payload.old?.user_id;
+        if (changedOwnerId && changedOwnerId !== LESPAL_WORKSPACE_ID) return;
+        onChange(table, payload);
+    };
 
-    if (error && userId) return null; // Not found for specific ID is ok
-    if (error) throw error;
-    return data;
-}
+    const channel = supabase
+        .channel(`library:${LESPAL_WORKSPACE_ID}`)
+        .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'lessons'
+        }, emitIfSharedLibrary('lessons'))
+        .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'songs'
+        }, emitIfSharedLibrary('songs'))
+        .subscribe(onStatus);
 
-export async function updateProfile(updates) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase
-        .from('user_profiles')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', user.id)
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-export async function getSecrets(userId) {
-    const { data, error } = await supabase
-        .from('user_secrets')
-        .select('*')
-        .eq('id', userId || (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-    // It's okay if secrets don't exist yet
-    if (error && error.code === 'PGRST116') return null;
-    if (error) throw error;
-    return data;
-}
-
-export async function updateSecrets(updates) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // UPSERT secrets
-    const { data, error } = await supabase
-        .from('user_secrets')
-        .upsert({ id: user.id, ...updates, updated_at: new Date().toISOString() })
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-export async function getTeacherOfStudent(studentId) {
-    const { data, error } = await supabase
-        .from('teacher_students')
-        .select('teacher_id')
-        .eq('student_id', studentId)
-        .single();
-    if (error) return null;
-    return data.teacher_id;
+    return () => { supabase.removeChannel(channel); };
 }

@@ -5,21 +5,21 @@
  * deduplicating songs by title+artist (keeping the most recent one).
  * 
  * Usage:
- *   1. Make sure you have the Supabase tables created (run supabase-sharing.sql first)
- *   2. Set your USER_ID below (from Supabase Auth)
+ *   1. Create the Supabase tables and apply supabase-shared-workspace.sql
+ *   2. Export SUPABASE_SERVICE_ROLE_KEY and LESPAL_USER_ID in your shell
  *   3. Run: node scripts/migrate-data.js
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';
 
 // ===========================================
 // CONFIGURATION - UPDATE THESE VALUES
 // ===========================================
-const SUPABASE_URL = 'https://odhkokbxpaolreqylvsf.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9kaGtva2J4cGFvbHJlcXlsdnNmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTk4Mjk0MywiZXhwIjoyMDgxNTU4OTQzfQ.71ydstnyKU29r_pajCRaFyI4dn94zz_4RavHPWOcTU8'; // Get from Supabase Dashboard > Settings > API
-const USER_ID = 'a7f4579f-e464-4c11-aadc-2297791de158'; // Get from Supabase Auth > Users
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://odhkokbxpaolreqylvsf.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const USER_ID = process.env.LESPAL_USER_ID;
 
 // CSV file paths
 const SONGS_CSV = './data-songs.csv';
@@ -242,15 +242,13 @@ async function main() {
     console.log('🚀 Lespal Data Migration');
     console.log('='.repeat(50));
 
-    if (USER_ID === 'YOUR_USER_ID_HERE') {
-        console.error('\n❌ ERROR: Please set USER_ID in the script');
-        console.log('   Get it from: Supabase Dashboard > Authentication > Users\n');
+    if (!USER_ID) {
+        console.error('\n❌ ERROR: Set LESPAL_USER_ID before running this migration');
         process.exit(1);
     }
 
-    if (SUPABASE_SERVICE_KEY === 'YOUR_SERVICE_ROLE_KEY_HERE') {
-        console.error('\n❌ ERROR: Please set SUPABASE_SERVICE_KEY in the script');
-        console.log('   Get it from: Supabase Dashboard > Settings > API > service_role key\n');
+    if (!SUPABASE_SERVICE_KEY) {
+        console.error('\n❌ ERROR: Set SUPABASE_SERVICE_ROLE_KEY before running this migration');
         process.exit(1);
     }
 

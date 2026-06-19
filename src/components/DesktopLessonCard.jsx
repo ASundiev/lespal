@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Pill } from "./ui/pill";
 import { SquarePen } from "lucide-react";
+import { formatLessonDate } from "@/lib/dateUtils";
 
 export function DesktopLessonCard({ lesson, previousCount, className, showShadow = true, onEdit }) {
     // Format date: "10 Dec 2025"
-    const dateStr = new Date(lesson.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const dateStr = formatLessonDate(lesson.date);
 
     // Track hover state for border gradient change (only for front card with onEdit)
     const [isHovered, setIsHovered] = useState(false);
@@ -59,8 +60,10 @@ export function DesktopLessonCard({ lesson, previousCount, className, showShadow
             {/* Edit Button - tertiary style, appears on card hover */}
             {onEdit && (
                 <button
+                    type="button"
+                    aria-label={`Edit lesson from ${dateStr}`}
                     onClick={() => onEdit(lesson)}
-                    className="group/edit absolute bottom-[24px] right-[24px] opacity-0 group-hover:opacity-100 transition-all duration-300 w-[44px] h-[44px] p-[12px] rounded-full flex items-center justify-center bg-[rgba(255,204,0,0.24)] hover:bg-[#fc0] border border-transparent hover:border-[#ebac00]"
+                    className="group/edit absolute bottom-[24px] right-[24px] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-300 w-[44px] h-[44px] p-[12px] rounded-full flex items-center justify-center bg-[rgba(255,204,0,0.24)] hover:bg-[#fc0] border border-transparent hover:border-[#ebac00]"
                 >
                     <SquarePen size={20} strokeWidth={2} className="text-[#FFCC00] group-hover/edit:text-[#181723] transition-colors" />
                 </button>

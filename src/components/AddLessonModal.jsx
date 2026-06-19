@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronDown, Calendar, SquarePen } from "lucide-react";
+import { ChevronDown, Calendar, Loader2, SquarePen } from "lucide-react";
 import { cn } from "./ui/utils";
 import { Button } from "./ui/button";
+import { formatLessonDate, todayDateInput } from "@/lib/dateUtils";
 
 // Song Pill component matching design
 function SongPill({ song, onRemove }) {
     return (
         <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-[rgba(255,255,255,0.08)] text-[#6ee7b7] text-[11px] font-medium font-['Inter_Tight'] tracking-[0.44px] leading-[20px]">
             <span>{song.title} — {song.artist}</span>
-            <button onClick={onRemove} className="ml-1 hover:opacity-70 transition-opacity">×</button>
+            <button type="button" aria-label={`Remove ${song.title}`} onClick={onRemove} className="ml-1 hover:opacity-70 transition-opacity">×</button>
         </div>
     );
 }
@@ -27,8 +28,15 @@ function SongsSelector({ songs, selectedIds, onToggle, isOpen, setIsOpen }) {
         <div className="relative">
             {/* Input Field Container */}
             <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={isOpen}
+                aria-label="Select songs rehearsed"
                 className="min-h-[52px] px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] flex items-center justify-between cursor-pointer hover:border-[rgba(255,255,255,0.16)] transition-colors"
                 onClick={() => setIsOpen(!isOpen)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') setIsOpen(!isOpen);
+                }}
             >
                 <div className="flex flex-wrap gap-2 flex-1">
                     {selectedSongs.length === 0 && (
@@ -86,24 +94,15 @@ function SongsSelector({ songs, selectedIds, onToggle, isOpen, setIsOpen }) {
 
 export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initial, lastLesson }) {
     const isEdit = !!initial;
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [date, setDate] = useState(todayDateInput);
     const [notes, setNotes] = useState("");
     const [selectedSongIds, setSelectedSongIds] = useState([]);
     const dateInputRef = useRef(null);
     const [songsDropdownOpen, setSongsDropdownOpen] = useState(false);
     const [isEditingCounter, setIsEditingCounter] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState("");
     const counterInputRef = useRef(null);
-    const DRAFT_KEY_NEW = "lespal_lesson_draft_new";
-    const getDraftKey = (lessonId) => lessonId ? `lespal_lesson_draft_${lessonId}` : DRAFT_KEY_NEW;
-
-    // Save to localStorage whenever notes or songs change (for both new and editing)
-    useEffect(() => {
-        if (open && (notes || selectedSongIds.length > 0)) {
-            const key = getDraftKey(initial?.id);
-            localStorage.setItem(key, JSON.stringify({ notes, selectedSongIds }));
-        }
-    }, [notes, selectedSongIds, open, initial]);
-
     useEffect(() => {
         if (isEditingCounter && counterInputRef.current) {
             counterInputRef.current.focus();
@@ -116,64 +115,68 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
         (lastLesson?.remaining_lessons ? Math.max(0, parseInt(lastLesson.remaining_lessons) - 1) : 0)
     );
 
-    // Initialize form state when modal opens - handles both editing and new lesson with draft recovery
+    // Initialize form state from the confirmed database row whenever it opens.
     useEffect(() => {
         if (open) {
-            const draftKey = getDraftKey(initial?.id);
-            let draftNotes = "";
-            let draftSongIds = [];
-
-            // Try to load draft from localStorage
-            try {
-                const saved = localStorage.getItem(draftKey);
-                if (saved) {
-                    const draft = JSON.parse(saved);
-                    draftNotes = draft.notes || "";
-                    draftSongIds = draft.selectedSongIds || [];
-                }
-            } catch (e) {
-                console.warn("Failed to load draft:", e);
-            }
-
             if (initial) {
-                // Editing an existing lesson: use draft if available, otherwise use initial data
-                setDate(initial.date ? new Date(initial.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-                setNotes(draftNotes || initial.notes || "");
-                setSelectedSongIds(draftSongIds.length > 0 ? draftSongIds : (initial.topics ? String(initial.topics).split(',').filter(Boolean) : []));
+                setDate(initial.date || todayDateInput());
+                setNotes(initial.notes || "");
+                setSelectedSongIds(initial.topics ? String(initial.topics).split(',').filter(Boolean) : []);
                 setCalculatedRemaining(initial.remaining_lessons);
             } else {
-                // New lesson: use draft if available
-                setDate(new Date().toISOString().slice(0, 10));
-                setNotes(draftNotes);
-                setSelectedSongIds(draftSongIds);
+                setDate(todayDateInput());
+                setNotes("");
+                setSelectedSongIds([]);
                 setCalculatedRemaining(
                     lastLesson?.remaining_lessons ? Math.max(0, parseInt(lastLesson.remaining_lessons) - 1) : 0
                 );
             }
             setSongsDropdownOpen(false);
+            setSaveError("");
         }
     }, [open, initial, lastLesson]);
 
-    const handleSubmit = () => {
-        const draftKey = getDraftKey(initial?.id);
-        onSubmit({
-            ...(isEdit ? { id: initial.id } : {}),
-            date,
-            notes,
-            topics: selectedSongIds.join(','),
-            remaining_lessons: calculatedRemaining
-        });
-        onClose();
-        localStorage.removeItem(draftKey);
+    const handleSubmit = async () => {
+        setSaving(true);
+        setSaveError("");
+        try {
+            await onSubmit({
+                ...(isEdit ? { id: initial.id } : {}),
+                ...(isEdit ? { expected_updated_at: initial.updated_at } : {}),
+                date,
+                notes,
+                topics: selectedSongIds.join(','),
+                remaining_lessons: calculatedRemaining
+            });
+            onClose();
+        } catch (error) {
+            setSaveError(error?.message || 'Could not save this lesson');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm('Are you sure you want to delete this lesson?')) return;
+        setSaving(true);
+        setSaveError("");
+        try {
+            await onDelete(initial.id);
+            onClose();
+        } catch (error) {
+            setSaveError(error?.message || 'Could not delete this lesson');
+        } finally {
+            setSaving(false);
+        }
     };
 
     // Format date for display matching lesson card: "10 Dec 2025" uppercase
-    const displayDate = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+    const displayDate = formatLessonDate(date).toUpperCase();
 
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit lesson' : 'Add lesson'} className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             {/* Backdrop with blur */}
             <div
                 className="absolute inset-0 bg-[rgba(0,0,0,0.8)] backdrop-blur-md"
@@ -182,7 +185,7 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
 
             {/* Modal Card */}
             <div
-                className="relative z-10 w-full max-w-[1080px] mx-4 rounded-[24px] overflow-hidden flex flex-col"
+                className="relative z-10 flex max-h-[100dvh] w-full max-w-[1080px] flex-col overflow-hidden rounded-t-[24px] sm:max-h-[calc(100dvh-2rem)] sm:rounded-[24px]"
                 style={{
                     background: 'linear-gradient(217.06deg, #191719 21.52%, #171C1F 102.2%)',
                     border: '1px solid transparent',
@@ -193,13 +196,15 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
                 }}
             >
                 {/* Card Header */}
-                <div className="flex items-center justify-between px-[24px] py-[12px] border-b border-[#2c2a30]">
+                <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 border-b border-[#2c2a30] sm:px-[24px]">
                     {/* Left: Date with Calendar - clicking calendar opens date picker */}
                     <div className="flex items-center gap-2">
                         <span className="text-[rgba(255,255,255,0.48)] font-medium font-['Inter_Tight'] text-[12px] leading-[20px] tracking-[0.04em] uppercase">
                             {displayDate}
                         </span>
                         <button
+                            type="button"
+                            aria-label="Choose lesson date"
                             onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
                             className="p-1 hover:bg-[rgba(255,255,255,0.1)] rounded transition-colors -translate-y-[1px]"
                         >
@@ -221,6 +226,8 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
                         {!isEditingCounter ? (
                             <>
                                 <button
+                                    type="button"
+                                    aria-label="Edit lessons remaining"
                                     onClick={() => setIsEditingCounter(true)}
                                     className="text-[#FFCC00] hover:bg-[rgba(255,255,255,0.1)] p-1 rounded transition-colors"
                                 >
@@ -248,7 +255,7 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
                 </div>
 
                 {/* Card Content */}
-                <div className="p-[36px] flex-1 flex flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-[36px] flex flex-col">
                     {/* Content Container */}
                     <div className="flex flex-col gap-6 flex-1">
                         {/* Songs Input */}
@@ -276,25 +283,20 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
                                 value={notes}
                                 onChange={e => setNotes(e.target.value)}
                                 placeholder="What did we work on today?"
-                                className="flex-1 min-h-[200px] px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] resize-none focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
+                                className="flex-1 min-h-[160px] sm:min-h-[200px] px-4 py-3 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white font-['Inter'] text-[14px] leading-[1.6] resize-none focus:outline-none focus:border-[rgba(255,255,255,0.24)] transition-colors placeholder:text-[rgba(255,255,255,0.32)]"
                             />
                         </div>
                     </div>
 
                     {/* Footer Buttons */}
-                    <div className="flex items-center justify-between gap-4 mt-6">
+                    {saveError && <p role="alert" className="mt-4 text-sm text-red-300">{saveError}</p>}
+                    <div className="flex items-center justify-between gap-3 mt-6">
                         {/* Delete Button - Left Aligned, only when editing */}
                         {isEdit && onDelete ? (
                             <Button
                                 variant="ghost"
-                                onClick={() => {
-                                    if (window.confirm('Are you sure you want to delete this lesson?')) {
-                                        const draftKey = getDraftKey(initial?.id);
-                                        localStorage.removeItem(draftKey);
-                                        onDelete(initial.id);
-                                        onClose();
-                                    }
-                                }}
+                                onClick={handleDelete}
+                                disabled={saving}
                                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                             >
                                 Delete
@@ -303,11 +305,12 @@ export function AddLessonModal({ open, onClose, onSubmit, onDelete, songs, initi
 
                         {/* Cancel/Save - Right Aligned */}
                         <div className="flex items-center gap-4">
-                            <Button variant="glass" onClick={onClose}>
+                            <Button variant="glass" onClick={onClose} disabled={saving}>
                                 Cancel
                             </Button>
-                            <Button onClick={handleSubmit}>
-                                {isEdit ? 'Save Changes' : 'Save'}
+                            <Button onClick={handleSubmit} disabled={saving}>
+                                {saving && <Loader2 size={18} className="animate-spin" />}
+                                {saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Save')}
                             </Button>
                         </div>
                     </div>

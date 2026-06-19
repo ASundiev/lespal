@@ -6,7 +6,7 @@
 -- 1. Create songs table
 CREATE TABLE IF NOT EXISTS songs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   artist TEXT,
   status TEXT CHECK (status IN ('rehearsing', 'want', 'studied', 'recorded')),
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS songs (
 -- 2. Create lessons table
 CREATE TABLE IF NOT EXISTS lessons (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  date DATE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
   notes TEXT,
   topics TEXT,  -- Comma-separated song IDs (for compatibility)
   link TEXT,
@@ -38,28 +38,36 @@ ALTER TABLE songs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
 
 -- 4. Create RLS Policies for songs
+DROP POLICY IF EXISTS "Users can view their own songs" ON songs;
 CREATE POLICY "Users can view their own songs" ON songs
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own songs" ON songs;
 CREATE POLICY "Users can insert their own songs" ON songs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own songs" ON songs;
 CREATE POLICY "Users can update their own songs" ON songs
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own songs" ON songs;
 CREATE POLICY "Users can delete their own songs" ON songs
   FOR DELETE USING (auth.uid() = user_id);
 
 -- 5. Create RLS Policies for lessons
+DROP POLICY IF EXISTS "Users can view their own lessons" ON lessons;
 CREATE POLICY "Users can view their own lessons" ON lessons
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own lessons" ON lessons;
 CREATE POLICY "Users can insert their own lessons" ON lessons
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own lessons" ON lessons;
 CREATE POLICY "Users can update their own lessons" ON lessons
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own lessons" ON lessons;
 CREATE POLICY "Users can delete their own lessons" ON lessons
   FOR DELETE USING (auth.uid() = user_id);
 

@@ -1,14 +1,14 @@
 import React, { useState } from "react";
 import { SongTag } from "./ui/SongTag";
 import { SquarePen } from "lucide-react";
-import { YouTubeModal, getYouTubeVideoId } from "./YouTubeModal";
+import { YouTubeModal } from "./YouTubeModal";
+import { getYouTubeVideoId } from "@/lib/youtube";
 
 /**
  * SongCard - Horizontal card for displaying a song
  * Matches Figma design with glass effect container
  */
 export function SongCard({ song, onEdit }) {
-    const [isHovered, setIsHovered] = useState(false);
     const [showVideoModal, setShowVideoModal] = useState(false);
 
     // Check if video link is a YouTube link
@@ -17,17 +17,17 @@ export function SongCard({ song, onEdit }) {
     return (
         <>
             <div
-                className="group relative flex gap-[24px] items-center p-[20px] rounded-[24px] bg-[rgba(0,0,0,0.12)]"
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
+                className="group relative flex gap-3 sm:gap-[24px] items-center p-4 sm:p-[20px] rounded-[24px] bg-[rgba(0,0,0,0.12)]"
             >
                 {/* Album Artwork */}
-                <div className="relative w-[160px] h-[160px] rounded-[16px] overflow-hidden shrink-0">
+                <div className="relative size-24 sm:size-[160px] rounded-[16px] overflow-hidden shrink-0">
                     {song.artwork_url ? (
                         <>
                             <img
                                 src={song.artwork_url}
                                 alt={`${song.title} artwork`}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-full h-full object-cover"
                             />
                             {/* Overlay */}
@@ -77,8 +77,10 @@ export function SongCard({ song, onEdit }) {
                 {/* Edit Button - tertiary style, appears on card hover (same as lesson card) */}
                 {onEdit && (
                     <button
+                        type="button"
+                        aria-label={`Edit ${song.title}`}
                         onClick={() => onEdit(song)}
-                        className="group/edit absolute bottom-[24px] right-[24px] opacity-0 group-hover:opacity-100 transition-all duration-300 w-[44px] h-[44px] p-[12px] rounded-full flex items-center justify-center bg-[rgba(255,204,0,0.24)] hover:bg-[#fc0] border border-transparent hover:border-[#ebac00]"
+                        className="group/edit absolute bottom-3 right-3 sm:bottom-[24px] sm:right-[24px] opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-all duration-300 w-[44px] h-[44px] p-[12px] rounded-full flex items-center justify-center bg-[rgba(255,204,0,0.24)] hover:bg-[#fc0] border border-transparent hover:border-[#ebac00]"
                     >
                         <SquarePen size={20} strokeWidth={2} className="text-[#FFCC00] group-hover/edit:text-[#181723] transition-colors" />
                     </button>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
+import { motion as Motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { DesktopLessonCard } from "./DesktopLessonCard";
 import { MobileLessonCard } from "./MobileLessonCard";
 import { Button } from "./ui/button";
@@ -105,6 +105,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
             />
             <Button
                 variant="ghost"
+                aria-label={direction === 'left' ? 'Older lesson' : 'Newer lesson'}
                 onClick={onClick}
                 disabled={disabled}
                 className="w-full h-full p-[24px] bg-transparent border-none text-white hover:text-white hover:bg-transparent transition-colors rounded-full relative z-10"
@@ -135,7 +136,7 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                         const remainingLessons = lesson.remaining_lessons ?? 0;
 
                         return (
-                            <motion.div
+                            <Motion.div
                                 key={lesson.id || `lesson-${safeIndex + i}`} // Use ID if possible
                                 custom={direction}
                                 className="absolute top-0 left-0 w-full"
@@ -156,11 +157,11 @@ export function LessonStack({ lessons, isMobile, onEdit }) {
                                 whileTap={isMobile && isFront ? { cursor: "grabbing" } : {}}
                             >
                                 {isMobile ? (
-                                    <MobileLessonCard lesson={lesson} previousCount={remainingLessons} />
+                                    <MobileLessonCard lesson={lesson} previousCount={remainingLessons} onEdit={isFront ? onEdit : undefined} />
                                 ) : (
                                     <DesktopLessonCard lesson={lesson} previousCount={remainingLessons} showShadow={isFront} onEdit={isFront ? onEdit : undefined} />
                                 )}
-                            </motion.div>
+                            </Motion.div>
                         );
                     })}
                 </AnimatePresence>

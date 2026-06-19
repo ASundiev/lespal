@@ -53,9 +53,7 @@ const GlassEffects = () => (
   </>
 );
 
-export const Button = React.forwardRef(({ className, variant, size, asChild = false, ...props }, ref) => {
-  const Comp = asChild ? React.Fragment : "button"
-
+export const Button = React.forwardRef(({ className, variant, size, ...props }, ref) => {
   // If variant is glass, we need a relative container for the effects. 
   // But wait, the effects need to sit *behind* the content but *inside* the button?
   // Or the button itself is the relative container?

@@ -26,6 +26,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_SUPABASE_PROXY_URL: https://lespal-db.asundiev.com/supabase
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4

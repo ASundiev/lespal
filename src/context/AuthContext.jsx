@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { clearLibraryCache } from '@/lib/libraryCache';
 
 const AuthContext = createContext({});
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 2500;
@@ -81,9 +82,7 @@ export function AuthProvider({ children }) {
     const signOut = async () => {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
-        Object.keys(sessionStorage)
-            .filter(key => key.startsWith('lespal_library_v2:'))
-            .forEach(key => sessionStorage.removeItem(key));
+        clearLibraryCache();
         setUser(null);
     };
 

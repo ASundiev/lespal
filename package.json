@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/mobile-regression-tests.mjs && node scripts/proxy-retry-tests.mjs && node scripts/date-utils-tests.mjs",
+    "test": "node scripts/mobile-regression-tests.mjs && node scripts/proxy-retry-tests.mjs && node scripts/date-utils-tests.mjs && node scripts/library-cache-tests.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build && cp dist/index.html dist/404.html",
     "deploy": "gh-pages -d dist"

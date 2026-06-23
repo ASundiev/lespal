@@ -2,11 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { isSafeToRetry, prioritizeProxyUrls } from './proxyRetry';
 
 const directSupabaseUrl = 'https://odhkokbxpaolreqylvsf.supabase.co';
-const supabaseEndpoints = [
+const configuredProxyUrl = import.meta.env.VITE_SUPABASE_PROXY_URL?.replace(/\/$/, '');
+const legacyProxyEndpoints = [
     'https://94.72.103.203.nip.io/supabase',
     'https://94-72-103-203.nip.io/supabase',
     'https://94-72-103-203.sslip.io/supabase',
     'https://94.72.103.203.sslip.io/supabase',
+];
+const supabaseEndpoints = [
+    ...(configuredProxyUrl ? [configuredProxyUrl] : []),
+    ...legacyProxyEndpoints,
     directSupabaseUrl,
 ];
 const proxiedSupabaseUrl = supabaseEndpoints[0];

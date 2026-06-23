@@ -69,3 +69,11 @@ npm run deploy
 
 This builds the app and publishes `dist/` to the `gh-pages` branch. Generated
 `dist` output is intentionally ignored on the source branch.
+
+The app is currently served from GitHub Pages at
+`https://asundiev.github.io/lespal/`. The Supabase database can still be routed
+through the separate VPS proxy at
+`https://lespal-db.asundiev.com/supabase`. The GitHub Actions deployment bakes
+that URL into the app with `VITE_SUPABASE_PROXY_URL`. If it is not set, the app
+falls back to the existing dynamic proxy hostnames and then the direct Supabase
+URL.

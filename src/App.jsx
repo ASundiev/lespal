@@ -9,23 +9,10 @@ import { CategoryTabs } from "@/components/ui/CategoryTabs";
 import { SongCard } from "@/components/SongCard";
 import { useAuth } from "@/context/AuthContext";
 import * as supabaseApi from "@/lib/supabaseApi";
-import { LESPAL_WORKSPACE_ID } from "@/lib/sharedWorkspace";
+import { LESPAL_MEMBER_EMAILS, LESPAL_WORKSPACE_ID, isLespalMember } from "@/lib/sharedWorkspace";
+import { readBestLibraryCache, writeLibraryCache } from "@/lib/libraryCache";
 
-const BUILD_ID = "2026-06-19-stabilized";
-const LIBRARY_CACHE_PREFIX = 'lespal_library_v2:';
-
-function readLibraryCache(workspaceId) {
-  try {
-    const cached = JSON.parse(sessionStorage.getItem(`${LIBRARY_CACHE_PREFIX}${workspaceId}`));
-    return cached && Array.isArray(cached.songs) && Array.isArray(cached.lessons) ? cached : null;
-  } catch { return null; }
-}
-
-function writeLibraryCache(workspaceId, songs, lessons) {
-  try {
-    sessionStorage.setItem(`${LIBRARY_CACHE_PREFIX}${workspaceId}`, JSON.stringify({ songs, lessons }));
-  } catch { /* Storage is an optional speed-up. */ }
-}
+const BUILD_ID = "2026-06-23-resilience";
 
 function applyDatabaseChange(rows, payload) {
   const id = payload.new?.id || payload.old?.id;
@@ -391,6 +378,7 @@ export default function App() {
   const [tab, setTab] = useState("lessons");
   const [isTabPending, startTabTransition] = useTransition();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const userIsMember = isLespalMember(user);
 
   // Always load live Supabase data after auth. A single browser-wide cache was
   // showing stale/empty lessons to the teacher across hard refreshes.
@@ -399,6 +387,8 @@ export default function App() {
   const [loadingSongs, setLoadingSongs] = useState(true);
   const [loadingLessons, setLoadingLessons] = useState(true);
   const [lessonsError, setLessonsError] = useState(null);
+  const [libraryWarning, setLibraryWarning] = useState(null);
+  const [cacheLoadedAt, setCacheLoadedAt] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
   const songsRequestRef = useRef(0);
   const lessonsRequestRef = useRef(0);
@@ -418,9 +408,14 @@ export default function App() {
     try {
       const s = await supabaseApi.listSongs();
       s.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-      if (requestId === songsRequestRef.current) setSongs(s);
+      if (requestId === songsRequestRef.current) {
+        setSongs(s);
+      }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
+      if (requestId === songsRequestRef.current && silent) {
+        setLibraryWarning('Could not refresh from the database. Showing the last saved copy on this device.');
+      }
     } finally {
       if (requestId === songsRequestRef.current) setLoadingSongs(false);
     }
@@ -433,11 +428,19 @@ export default function App() {
     setLessonsError(null);
     try {
       const l = await supabaseApi.listLessons();
-      if (requestId === lessonsRequestRef.current) setLessons(l);
+      if (requestId === lessonsRequestRef.current) {
+        setLessons(l);
+        setLibraryWarning(null);
+        setCacheLoadedAt(null);
+      }
     } catch (supabaseError) {
       console.warn('Supabase failed:', supabaseError);
       if (requestId === lessonsRequestRef.current) {
-        setLessonsError(supabaseError?.message || 'Could not load lessons');
+        if (silent) {
+          setLibraryWarning('Could not refresh from the database. Showing the last saved copy on this device.');
+        } else {
+          setLessonsError(supabaseError?.message || 'Could not load lessons');
+        }
       }
     } finally {
       if (requestId === lessonsRequestRef.current) setLoadingLessons(false);
@@ -456,11 +459,12 @@ export default function App() {
 
   // Both accounts load the same permanent shared library.
   useEffect(() => {
-    if (user) {
-      const cached = readLibraryCache(LESPAL_WORKSPACE_ID);
+    if (user && userIsMember) {
+      const cached = readBestLibraryCache(LESPAL_WORKSPACE_ID);
       if (cached) {
         setSongs(cached.songs);
         setLessons(cached.lessons);
+        setCacheLoadedAt(cached.cachedAt || null);
         setLoadingSongs(false);
         setLoadingLessons(false);
       } else {
@@ -470,7 +474,7 @@ export default function App() {
       loadSongs({ silent: Boolean(cached) });
       loadLessons({ silent: Boolean(cached) });
     }
-  }, [user, loadSongs, loadLessons]);
+  }, [user, userIsMember, loadSongs, loadLessons]);
 
   useEffect(() => {
     if (!loadingSongs && !loadingLessons) {
@@ -481,8 +485,10 @@ export default function App() {
   // Supabase Realtime is the source of truth between the two open devices.
   // Mutations are also applied immediately below, so the author never waits
   // for the websocket round-trip to see their own change.
-  useEffect(() => supabaseApi.subscribeToLibrary(
-    (table, payload) => {
+  useEffect(() => {
+    if (!userIsMember) return undefined;
+
+    return supabaseApi.subscribeToLibrary((table, payload) => {
       if (table === 'lessons') {
         setLessons(rows => applyDatabaseChange(rows, payload)
           .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))));
@@ -490,9 +496,8 @@ export default function App() {
         setSongs(rows => applyDatabaseChange(rows, payload)
           .sort((a, b) => (a.title || '').localeCompare(b.title || '')));
       }
-    },
-    setRealtimeStatus
-  ), []);
+    }, setRealtimeStatus);
+  }, [userIsMember]);
 
   // Revalidate after mobile browsers restore the page. If the websocket is
   // unavailable, a lightweight poll keeps both devices convergent.
@@ -531,6 +536,22 @@ export default function App() {
 
   // AppShell owns login rendering. Keep a safe fallback for stale lazy renders.
   if (!user) return null;
+
+  if (!userIsMember) {
+    return (
+      <div className="min-h-screen bg-[#161616] text-white flex items-center justify-center px-6">
+        <div className="max-w-md text-center space-y-4">
+          <img src={`${import.meta.env.BASE_URL}logo-dark.svg`} alt="Lespal" className="mx-auto w-[120px] h-auto opacity-80" />
+          <h1 className="font-['Inter_Tight'] text-2xl font-semibold">This account is not part of Lespal</h1>
+          <p className="text-white/60 text-sm leading-6">
+            You are signed in as {user.email}. Lespal is currently shared only by{' '}
+            {LESPAL_MEMBER_EMAILS.join(' and ')}.
+          </p>
+          <Button onClick={signOut}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
 
   const handleUpsertSong = async (payload) => {
     const saved = payload?.id
@@ -647,6 +668,13 @@ export default function App() {
       {/* Content */}
       <div className="flex-1 z-10 relative">
         {isTabPending && <div className="sr-only" aria-live="polite">Switching tabs…</div>}
+        {(libraryWarning || cacheLoadedAt) && (
+          <div className="mx-auto mt-6 max-w-[720px] px-6">
+            <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+              {libraryWarning || `Showing the last saved copy from ${new Date(cacheLoadedAt).toLocaleString()}. Refreshing in the background…`}
+            </div>
+          </div>
+        )}
         {tab === 'lessons' && (
           <div className={`w-full flex justify-center ${isMobile ? 'mt-[24px] px-[16px]' : 'mt-[120px] px-[36px]'}`}>
             {loadingLessons ? (
